@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { AppPage } from '../types/navigation';
 import { LabelAnalysisReport } from '../types/label';
-import { analyzeLabel } from '../api/client';
+import { analyzeLabel, verifyFields } from '../api/client';
 import { EvidenceLens } from '../components/EvidenceLens';
 
 interface ScanPageProps {
@@ -28,10 +28,32 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
   const [restrictions, setRestrictions] = useState<string[]>(['peanut', 'tree_nut']);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const toggleRestriction = (id: string) => {
-    setRestrictions((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
-    );
+  const toggleRestriction = async (id: string) => {
+    const updated = restrictions.includes(id)
+      ? restrictions.filter((r) => r !== id)
+      : [...restrictions, id];
+    setRestrictions(updated);
+
+    if (analysisReport) {
+      try {
+        const reevaluated = await verifyFields({
+          ingredients: analysisReport.ingredients,
+          allergen_statements: analysisReport.allergen_statements,
+          nutrition_facts: analysisReport.nutrition_facts,
+          restrictions: updated,
+          targets: {},
+          raw_text: analysisReport.raw_text,
+          quality_tier: analysisReport.quality.quality_tier,
+        });
+        setAnalysisReport({
+          ...analysisReport,
+          findings: reevaluated.findings,
+          manual_confirmation_needed: reevaluated.manual_confirmation_needed,
+        });
+      } catch (err) {
+        console.error('Failed to re-evaluate restrictions:', err);
+      }
+    }
   };
 
   const handleFileChange = (file: File | null) => {
@@ -272,6 +294,53 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               Completed in LabelLens engine
             </span>
+          </div>
+
+          {/* Active Dietary Restrictions Selector Bar (Preserved on Results Page) */}
+          <div
+            className="active-restrictions-bar"
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              padding: '0.75rem 1rem',
+              borderRadius: '10px',
+              marginBottom: '1.25rem',
+              border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Active Allergy Check ({restrictions.length} selected):
+              </span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Click chips to toggle live re-evaluation
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {COMMON_RESTRICTIONS.map((res) => {
+                const isActive = restrictions.includes(res.id);
+                return (
+                  <button
+                    key={res.id}
+                    type="button"
+                    onClick={() => toggleRestriction(res.id)}
+                    style={{
+                      padding: '0.3rem 0.7rem',
+                      borderRadius: '16px',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      background: isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                      border: isActive ? '1px solid #10b981' : '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                      color: isActive ? '#34d399' : 'var(--text-secondary)',
+                      fontWeight: isActive ? 600 : 400,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isActive ? '✓ ' : '+ '}
+                    {res.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <EvidenceLens

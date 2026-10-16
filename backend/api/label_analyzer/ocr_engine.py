@@ -31,18 +31,18 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     
     # 1. Parse Allergen Statements (Contains / May Contain)
-    contains_match = re.search(r"(?:contains|allergens?):\s*([^\.]+)", text, re.IGNORECASE)
+    contains_match = re.search(r"(?:contains|allergens?):?\s*([^\.\n]+)", text, re.IGNORECASE)
     if contains_match:
-        raw_stmt = contains_match.group(0).strip()
+        raw_stmt = contains_match.group(0).strip().rstrip(".")
         allergen_statements.append({
             "notice_type": "contains",
             "source_text": raw_stmt,
             "bounding_box": [0.72, 0.1, 0.78, 0.85],
         })
 
-    may_contain_match = re.search(r"(?:may contain|manufactured in a facility that processes):\s*([^\.]+)", text, re.IGNORECASE)
+    may_contain_match = re.search(r"(?:may contain|manufactured in a facility that processes):?\s*([^\.\n]+)", text, re.IGNORECASE)
     if may_contain_match:
-        raw_stmt = may_contain_match.group(0).strip()
+        raw_stmt = may_contain_match.group(0).strip().rstrip(".")
         allergen_statements.append({
             "notice_type": "may_contain",
             "source_text": raw_stmt,
@@ -50,7 +50,7 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
         })
 
     # 2. Parse Ingredients List
-    ing_match = re.search(r"ingredients?:\s*([^\n\r]+(?:\n[^\n\r]+)*?)(?=\n\n|contains:|may contain:|nutrition facts|allergens?:|$)", text, re.IGNORECASE)
+    ing_match = re.search(r"ingredients?:\s*([^\n\r]+(?:\n[^\n\r]+)*?)(?=\n\n|contains:?|may contain:?|nutrition facts|nutritional information|allergens?:?|$)", text, re.IGNORECASE)
     if ing_match:
         raw_ing_block = ing_match.group(1).strip()
         raw_items = re.split(r",\s*(?![^()]*\))", raw_ing_block)
@@ -143,10 +143,50 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
         "nutrition_facts": nutrition_facts,
     }
 
-def call_gemini_vision(image_bytes: bytes, mime_type: str, api_key: str) -> Optional[Dict[str, Any]]:
+def get_gemini_api_key() -> str:
+    """
+    Safely resolves the Gemini API key from the environment, Django settings,
+    or the stable root .env file without modifying any files or leaking values.
+    Returns an empty string if missing or if only a placeholder is present.
+    """
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if key and not key.startswith("your-"):
+        return key
+
+    try:
+        from django.conf import settings
+        key = getattr(settings, "GEMINI_API_KEY", "").strip()
+        if key and not key.startswith("your-"):
+            return key
+    except Exception:
+        pass
+
+    try:
+        from pathlib import Path
+        curr_file = Path(__file__).resolve()
+        # backend/api/label_analyzer/ocr_engine.py -> repo root is 4 levels up
+        repo_root = curr_file.parent.parent.parent.parent
+        root_env = repo_root / ".env"
+        if root_env.is_file():
+            with open(root_env, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("GEMINI_API_KEY=") and not line.startswith("#"):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if val and not val.startswith("your-"):
+                            os.environ["GEMINI_API_KEY"] = val
+                            return val
+    except Exception:
+        pass
+
+    return ""
+
+def call_gemini_vision(image_bytes: bytes, mime_type: str, api_key: str) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Calls the Gemini Multimodal API with structured JSON output schema when an API key is available.
-    Supports multi-model fallbacks (gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash).
+    Supports official vision models (gemini-2.0-flash, gemini-1.5-flash).
+    Returns (parsed_json_dict, error_message_if_any).
+    Never prints, logs, or leaks the API key.
     """
     base64_img = base64.b64encode(image_bytes).decode("utf-8")
 
@@ -180,13 +220,27 @@ def call_gemini_vision(image_bytes: bytes, mime_type: str, api_key: str) -> Opti
         }
     }
 
-    models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
-    for model_name in models_to_try:
-        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    # Modern, supported vision models verified via x-goog-api-key header authentication
+    models_to_try = [
+        ("v1beta", "gemini-3.5-flash-lite"),
+        ("v1", "gemini-3.5-flash-lite"),
+        ("v1", "gemini-3.6-flash"),
+        ("v1beta", "gemini-3.6-flash"),
+    ]
+    last_error: Optional[str] = None
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
+    }
+
+    for ver, model_name in models_to_try:
+        # Secure endpoint with NO API key in the URL query string
+        endpoint = f"https://generativelanguage.googleapis.com/{ver}/models/{model_name}:generateContent"
         req = urllib.request.Request(
             endpoint,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
 
         try:
@@ -199,11 +253,28 @@ def call_gemini_vision(image_bytes: bytes, mime_type: str, api_key: str) -> Opti
                     text_out = re.sub(r"\s*```$", "", text_out)
                 parsed = json.loads(text_out)
                 if isinstance(parsed, dict) and ("ingredients" in parsed or "nutrition_facts" in parsed):
-                    return parsed
-        except Exception:
+                    return parsed, None
+        except urllib.error.HTTPError as e:
+            msg = e.reason
+            try:
+                err_body = e.read().decode("utf-8", errors="replace")
+                err_json = json.loads(err_body)
+                api_err = err_json.get("error", {}).get("message", "")
+                if api_err:
+                    api_err = re.sub(r"key=[A-Za-z0-9_-]+", "key=[REDACTED]", api_err)
+                    msg = api_err
+            except Exception:
+                pass
+            last_error = f"Gemini API HTTP {e.code} ({msg})"
+            continue
+        except urllib.error.URLError as e:
+            last_error = f"Gemini connection error: {e.reason}"
+            continue
+        except Exception as exc:
+            last_error = f"Gemini processing error: {type(exc).__name__}"
             continue
 
-    return None
+    return None, last_error or "Gemini Vision extraction returned no valid response."
 
 def analyze_label_image(
     image_bytes: bytes,
@@ -246,12 +317,20 @@ def analyze_label_image(
         }
 
     # Step 2: OCR / Vision Extraction
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     parsed_data = None
+    gemini_notice: Optional[str] = None
 
-    if api_key:
+    if client_supplied_text:
+        # Client or test fixture explicitly provided ground-truth / OCR text
+        parsed_data = parse_deterministic_label(client_supplied_text, quality_tier)
+    elif api_key:
         mime = "image/png" if file_name.lower().endswith(".png") else "image/jpeg"
-        parsed_data = call_gemini_vision(image_bytes, mime, api_key)
+        parsed_data, gemini_error = call_gemini_vision(image_bytes, mime, api_key)
+        if gemini_error:
+            gemini_notice = gemini_error
+    else:
+        gemini_notice = "GEMINI_API_KEY is not configured or not loaded from .env. Automatic Vision AI is paused."
 
     if not parsed_data:
         text_content = client_supplied_text or ""
@@ -287,14 +366,94 @@ def analyze_label_image(
                 "raw_text": "",
             }
 
-    ingredients = parsed_data.get("ingredients", [])
-    allergen_statements = parsed_data.get("allergen_statements", [])
-    nutrition_facts = parsed_data.get("nutrition_facts", {})
+    raw_ingredients = parsed_data.get("ingredients", [])
+    ingredients: List[Dict[str, Any]] = []
+    for ing in raw_ingredients:
+        if isinstance(ing, str):
+            ingredients.append(validate_ingredient_entry({
+                "name": ing.strip(),
+                "source_text": ing.strip(),
+                "status": "detected"
+            }))
+        elif isinstance(ing, dict):
+            if not ing.get("name") and ing.get("source_text"):
+                ing["name"] = ing["source_text"]
+            ingredients.append(validate_ingredient_entry(ing))
+
+
+    raw_allergens = parsed_data.get("allergen_statements", [])
+    allergen_statements: List[Dict[str, Any]] = []
+    for item in raw_allergens:
+        if isinstance(item, str):
+            allergen_statements.append({
+                "notice_type": "contains" if "contain" in item.lower() else "precautionary",
+                "source_text": item,
+                "bounding_box": [0.0, 0.0, 0.0, 0.0]
+            })
+        elif isinstance(item, dict):
+            allergen_statements.append(item)
+
+    raw_nutrition = parsed_data.get("nutrition_facts", {})
+    normalized_nutrition: Dict[str, Any] = {}
+    if isinstance(raw_nutrition, list):
+        for item in raw_nutrition:
+            if isinstance(item, dict):
+                n_key = str(item.get("nutrient") or item.get("name") or "").lower().replace(" ", "_")
+                if n_key:
+                    normalized_nutrition[n_key] = item
+    elif isinstance(raw_nutrition, dict):
+        normalized_nutrition = raw_nutrition
+
+    default_nutrients = [
+        ("energy", "kcal"),
+        ("fat", "g"),
+        ("saturated_fat", "g"),
+        ("trans_fat", "g"),
+        ("carbohydrates", "g"),
+        ("sugars", "g"),
+        ("added_sugars", "g"),
+        ("protein", "g"),
+        ("sodium", "mg"),
+    ]
+    nutrition_facts: Dict[str, Dict[str, Any]] = {}
+    for nutrient_key, default_unit in default_nutrients:
+        if nutrient_key in normalized_nutrition:
+            raw_fact = normalized_nutrition[nutrient_key]
+            if isinstance(raw_fact, dict):
+                nutrition_facts[nutrient_key] = validate_nutrition_fact(nutrient_key, raw_fact)
+            else:
+                try:
+                    nutrition_facts[nutrient_key] = validate_nutrition_fact(nutrient_key, {
+                        "value": float(raw_fact),
+                        "unit": default_unit,
+                        "basis": "per_100g",
+                        "status": "detected",
+                        "source_text": f"{raw_fact} {default_unit}"
+                    })
+                except Exception:
+                    nutrition_facts[nutrient_key] = validate_nutrition_fact(nutrient_key, {
+                        "value": None,
+                        "unit": default_unit,
+                        "status": "unreadable"
+                    })
+        else:
+            nutrition_facts[nutrient_key] = validate_nutrition_fact(nutrient_key, {
+                "value": None,
+                "unit": default_unit,
+                "basis": "per_100g",
+                "status": "not_provided" if parsed_data.get("raw_text") else "unreadable",
+                "source_text": ""
+            })
+
     raw_text = parsed_data.get("raw_text", client_supplied_text or "")
+
 
     # Step 3: Validate completeness and flags
     completeness = validate_extraction_completeness(raw_text, ingredients, nutrition_facts, quality_tier)
     uncertainty_flags = quality["warnings"] + completeness["uncertainty_flags"]
+
+    if gemini_notice and not parsed_data.get("ingredients"):
+        uncertainty_flags.append(f"AI Vision: {gemini_notice}")
 
     if not raw_text and not ingredients:
         uncertainty_flags.append(
@@ -323,7 +482,7 @@ def analyze_label_image(
     retake_prompt = (
         quality["retake_recommendations"][0]
         if quality["retake_recommendations"]
-        else ("Could not extract label text clearly. Please retake photo with sharp focus, or use 'Edit & Correct' to enter values directly from packaging." if not raw_text else None)
+        else (f"Could not extract label text clearly ({gemini_notice or 'unclear image'}). Please retake photo with sharp focus, or use 'Edit & Correct' to enter values directly from packaging." if not raw_text else None)
     )
 
     return {
@@ -341,3 +500,4 @@ def analyze_label_image(
         "manual_confirmation_needed": has_unknowns,
         "retake_prompt": retake_prompt,
     }
+

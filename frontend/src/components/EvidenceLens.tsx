@@ -70,9 +70,13 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
     updatedNutrition: Record<string, NutritionFact>
   ) => {
     try {
-      const activeRestrictions = report.findings
-        .map((f) => f.restriction)
-        .filter(Boolean) as string[];
+      const activeRestrictions = Array.from(
+        new Set(
+          report.findings
+            .map((f) => f.id || f.restriction)
+            .filter(Boolean) as string[]
+        )
+      );
 
       const verified = await verifyFields({
         ingredients: updatedIngredients,
@@ -205,9 +209,22 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
             </button>
           </div>
 
-          {/* Findings List */}
+          {/* Findings List (Consolidated & Deduplicated by Allergen) */}
           <div className="findings-group">
-            {report.findings.map((f, i) => {
+            {(() => {
+              const seen = new Set<string>();
+              const uniqueList = [];
+              for (const f of report.findings) {
+                const key = (f.id || f.restriction || f.target || '').toLowerCase().trim();
+                if (key && !seen.has(key)) {
+                  seen.add(key);
+                  uniqueList.push(f);
+                } else if (!key) {
+                  uniqueList.push(f);
+                }
+              }
+              return uniqueList;
+            })().map((f, i) => {
               const statusClass =
                 f.status === 'CONFLICT DETECTED'
                   ? 'finding-conflict'
@@ -218,15 +235,31 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                   : 'finding-clear';
 
               return (
-                <div key={i} className={`finding-card ${statusClass}`}>
+                <div key={f.id || f.restriction || i} className={`finding-card ${statusClass}`}>
                   <div className="finding-header">
                     <span className="finding-status-badge">{f.status}</span>
-                    <span className="finding-target">{f.restriction || f.target}</span>
+                    <span className="finding-target">{f.display_name || f.restriction || f.target}</span>
                   </div>
                   <p className="finding-desc">{f.explanation}</p>
                   {f.evidence && (
                     <div className="finding-evidence-quote">
                       <strong>Source Evidence:</strong> "{f.evidence}"
+                    </div>
+                  )}
+                  {f.action_recommendation && (
+                    <div
+                      className="finding-action-box"
+                      style={{
+                        marginTop: '0.6rem',
+                        fontSize: '0.82rem',
+                        padding: '0.45rem 0.75rem',
+                        borderRadius: '6px',
+                        background: f.severity === 'CRITICAL' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                        borderLeft: f.severity === 'CRITICAL' ? '3px solid #ef4444' : '3px solid #3b82f6',
+                        color: f.severity === 'CRITICAL' ? '#fca5a5' : 'var(--text-secondary)'
+                      }}
+                    >
+                      <strong>Recommended Action:</strong> {f.action_recommendation}
                     </div>
                   )}
                 </div>

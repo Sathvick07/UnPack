@@ -11,6 +11,7 @@ export interface ImageQualityInfo {
   format: string;
   aspect_ratio: number;
   contrast_score: number;
+  blur_metric?: number;
   is_curved_surface?: boolean;
   quality_tier: QualityTier;
   quality_score: number;
@@ -46,13 +47,16 @@ export interface NutritionFact {
 }
 
 export interface CompatibilityFinding {
+  id?: string;
   restriction?: string;
+  display_name?: string;
   target?: string;
   status: string;
   severity: FindingSeverity;
   explanation: string;
   evidence: string;
   source_type: string;
+  action_recommendation?: string;
   requires_manual_confirmation: boolean;
 }
 

@@ -5,25 +5,38 @@ Django settings for unpack_backend project.
 import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Build paths inside the project: BASE_DIR is backend/, PROJECT_ROOT is repository root
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
 
 # Load local environment configuration from root .env if present
-for env_candidate in [BASE_DIR.parent / '.env', BASE_DIR / '.env']:
-    if env_candidate.exists():
+def _load_env_file(env_file_path: Path):
+    if env_file_path.is_file():
         try:
-            with open(env_candidate, 'r', encoding='utf-8') as f:
+            with open(env_file_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#') and '=' in line:
                         k, v = line.split('=', 1)
                         k = k.strip()
                         v = v.strip().strip('"').strip("'")
-                        if k and k not in os.environ:
-                            os.environ[k] = v
+                        if k:
+                            curr = os.environ.get(k, '').strip()
+                            # Prioritize non-empty .env values over empty or placeholder env vars
+                            if v and (not curr or curr.startswith('your-') or k == 'GEMINI_API_KEY'):
+                                os.environ[k] = v
+                            elif k not in os.environ:
+                                os.environ[k] = v
         except Exception:
             pass
+
+for env_candidate in [PROJECT_ROOT / '.env', BASE_DIR / '.env']:
+    if env_candidate.exists():
+        _load_env_file(env_candidate)
         break
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
+
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get(
