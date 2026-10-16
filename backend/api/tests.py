@@ -320,3 +320,129 @@ class Mission2EdgeCaseTests(APITestCase):
         data = response.json()
         self.assertFalse(data["is_complete"])
         self.assertTrue(any("truncated" in f.lower() or "cut off" in f.lower() for f in data["uncertainty_flags"]))
+
+    def test_no_mock_data_fabricated_on_unparsed_image(self):
+        """
+        Regression test: When an image cannot be parsed by OCR, the backend must NEVER
+        silently fabricate hardcoded oatmeal numbers (450 kcal, 15g fat, etc.).
+        It must report null/unreadable and require manual confirmation.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("unparsed_label.jpg", img_bytes, content_type="image/jpeg")
+
+        response = self.client.post(
+            self.analyze_url,
+            {"image": image_file},
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        
+        # Verify NO fake 450 kcal or oatmeal ingredients were invented
+        self.assertEqual(data["ingredients"], [])
+        energy_fact = data["nutrition_facts"].get("energy")
+        self.assertIsNotNone(energy_fact)
+        self.assertIsNone(energy_fact["value"])
+        self.assertEqual(energy_fact["status"], "unreadable")
+        self.assertTrue(data["manual_confirmation_needed"])
+        self.assertTrue(any("manual review" in f.lower() for f in data["uncertainty_flags"]))
+
+    def test_multi_column_tabular_nutrition_extraction(self):
+        """
+        Regression test: Multi-column packaging tables (e.g. Per 100g vs Per Serving)
+        must preserve both columns accurately without mixing units or rows.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("chips_packet.jpg", img_bytes, content_type="image/jpeg")
+
+        chips_tabular_label = (
+            "INGREDIENTS: Potato, edible vegetable oil, spices and condiments, iodized salt.\n"
+            "CONTAINS: Wheat.\n"
+            "NUTRITIONAL INFORMATION\n"
+            "Approx. Values Per 100g | Per Serve (20g)\n"
+            "Energy (kcal) 524 105\n"
+            "Protein (g) 7.1 1.4\n"
+            "Carbohydrate (g) 50.6 10.1\n"
+            "Total Sugars (g) 1.6 0.3\n"
+            "Added Sugars (g) 0.0 0.0\n"
+            "Total Fat (g) 33.5 6.7\n"
+            "Saturated Fat (g) 15.0 3.0\n"
+            "Trans Fat (g) 0.1 0.02\n"
+            "Sodium (mg) 650 130"
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": chips_tabular_label,
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        nutrition = data["nutrition_facts"]
+
+        # 1. Energy
+        self.assertEqual(nutrition["energy"]["value"], 524.0)
+        self.assertEqual(nutrition["energy"]["serving_value"], 105.0)
+        self.assertEqual(nutrition["energy"]["basis"], "per_100g")
+        self.assertEqual(nutrition["energy"]["serving_basis"], "per_serving")
+
+        # 2. Protein
+        self.assertEqual(nutrition["protein"]["value"], 7.1)
+        self.assertEqual(nutrition["protein"]["serving_value"], 1.4)
+
+        # 3. Carbohydrate (singular and plural must both work)
+        self.assertEqual(nutrition["carbohydrates"]["value"], 50.6)
+        self.assertEqual(nutrition["carbohydrates"]["serving_value"], 10.1)
+        self.assertEqual(nutrition["carbohydrates"]["status"], "detected")
+
+        # 4. Total Sugars vs Added Sugars
+        self.assertEqual(nutrition["sugars"]["value"], 1.6)
+        self.assertEqual(nutrition["sugars"]["serving_value"], 0.3)
+        self.assertEqual(nutrition["added_sugars"]["value"], 0.0)
+        self.assertTrue(nutrition["added_sugars"]["is_zero_explicit"])
+
+        # 5. Total Fat & Saturated Fat
+        self.assertEqual(nutrition["fat"]["value"], 33.5)
+        self.assertEqual(nutrition["fat"]["serving_value"], 6.7)
+        self.assertEqual(nutrition["saturated_fat"]["value"], 15.0)
+        self.assertEqual(nutrition["saturated_fat"]["serving_value"], 3.0)
+
+        # 6. Sodium
+        self.assertEqual(nutrition["sodium"]["value"], 650.0)
+        self.assertEqual(nutrition["sodium"]["serving_value"], 130.0)
+        self.assertEqual(nutrition["sodium"]["unit"], "mg")
+
+    def test_carbohydrates_plural_matching(self):
+        """
+        Regression test: Verify that 'Total Carbohydrates' (plural) correctly matches.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("label.jpg", img_bytes, content_type="image/jpeg")
+
+        label_text = (
+            "INGREDIENTS: Wheat flour, water.\n"
+            "NUTRITION FACTS:\n"
+            "Total Carbohydrates: 68.5 g\n"
+            "Energy: 320 kcal"
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": label_text,
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        carbs = data["nutrition_facts"].get("carbohydrates")
+        self.assertIsNotNone(carbs)
+        self.assertEqual(carbs["value"], 68.5)
+        self.assertEqual(carbs["status"], "detected")

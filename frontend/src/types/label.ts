@@ -1,5 +1,5 @@
 export type QualityTier = 'CLEAR' | 'MODERATE' | 'UNCERTAIN' | 'UNREADABLE';
-export type EvidenceStatus = 'detected' | 'uncertain' | 'unreadable' | 'not_provided' | 'ambiguous';
+export type EvidenceStatus = 'detected' | 'uncertain' | 'unreadable' | 'not_provided' | 'ambiguous' | 'needs_review' | 'unknown';
 export type FindingSeverity = 'CRITICAL' | 'WARNING' | 'ATTENTION' | 'INFO';
 
 export interface ImageQualityInfo {
@@ -38,6 +38,8 @@ export interface NutritionFact {
   value: number | null;
   unit: string;
   basis: string;
+  serving_value?: number | null;
+  serving_basis?: string;
   status: EvidenceStatus;
   source_text: string;
   is_zero_explicit?: boolean;

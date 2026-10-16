@@ -13,6 +13,8 @@ VALID_STATUSES = {
     "unreadable",
     "not_provided",
     "ambiguous",
+    "needs_review",
+    "unknown",
 }
 
 VALID_BASES = {
@@ -48,7 +50,7 @@ def validate_ingredient_entry(item: Dict[str, Any]) -> Dict[str, Any]:
 def validate_nutrition_fact(nutrient_name: str, fact: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validates a nutrition fact entry. Strictly distinguishes 0.0 (explicitly stated on label)
-    from None / null (not provided or unreadable).
+    from None / null (not provided or unreadable), and separates per-100g from per-serving values.
     """
     raw_val = fact.get("value")
     value: Optional[float] = None
@@ -57,6 +59,14 @@ def validate_nutrition_fact(nutrient_name: str, fact: Dict[str, Any]) -> Dict[st
             value = round(float(raw_val), 2)
         except (ValueError, TypeError):
             value = None
+
+    raw_serving = fact.get("serving_value")
+    serving_value: Optional[float] = None
+    if raw_serving is not None:
+        try:
+            serving_value = round(float(raw_serving), 2)
+        except (ValueError, TypeError):
+            serving_value = None
 
     status = str(fact.get("status", "detected" if value is not None else "not_provided")).lower()
     if status not in VALID_STATUSES:
@@ -67,6 +77,8 @@ def validate_nutrition_fact(nutrient_name: str, fact: Dict[str, Any]) -> Dict[st
     if basis not in VALID_BASES:
         basis = "unknown"
 
+    serving_basis = str(fact.get("serving_basis", "per_serving" if serving_value is not None else "")).lower()
+
     source_text = str(fact.get("source_text", "")).strip()
 
     return {
@@ -74,6 +86,8 @@ def validate_nutrition_fact(nutrient_name: str, fact: Dict[str, Any]) -> Dict[st
         "value": value,
         "unit": unit,
         "basis": basis,
+        "serving_value": serving_value,
+        "serving_basis": serving_basis,
         "status": status,
         "source_text": source_text,
         "is_zero_explicit": (value == 0.0 and bool(source_text)),

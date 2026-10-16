@@ -262,14 +262,24 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
 
           {/* Nutrition Facts Table with Safe Missing-Value Handling */}
           <div className="nutrition-review-section">
-            <h4 className="subpane-title">Nutrition Facts Table</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <h4 className="subpane-title" style={{ margin: 0 }}>Nutrition Facts Table</h4>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsEditModalOpen(true)}
+              >
+                ✏️ Edit & Correct Data
+              </button>
+            </div>
+
             <div className="nutrition-table-wrapper">
               <table className="nutrition-table">
                 <thead>
                   <tr>
                     <th>Nutrient</th>
-                    <th>Extracted Amount</th>
-                    <th>Basis</th>
+                    <th>Per 100g</th>
+                    <th>Per Serving</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -278,18 +288,26 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                     const isMissing = fact.value === null;
                     return (
                       <tr key={key} className={isMissing ? 'row-missing' : 'row-present'}>
-                        <td className="nutrient-name">{key.toUpperCase()}</td>
+                        <td className="nutrient-name">{key.replace('_', ' ').toUpperCase()}</td>
                         <td className="nutrient-val">
                           {isMissing ? (
-                            <span className="missing-val-badge">Not Provided on Label</span>
+                            <span className="missing-val-badge">
+                              {fact.status === 'unreadable' ? 'Uncertain / Needs Review' : 'Not Provided on Label'}
+                            </span>
                           ) : (
                             <strong>{fact.value} {fact.unit}</strong>
                           )}
                         </td>
-                        <td className="nutrient-basis">{fact.basis}</td>
+                        <td className="nutrient-serving">
+                          {fact.serving_value !== null && fact.serving_value !== undefined ? (
+                            <span>{fact.serving_value} {fact.unit}</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
                         <td>
                           <span className={`status-cell status-${fact.status}`}>
-                            {fact.status}
+                            {fact.status.replace('_', ' ')}
                           </span>
                         </td>
                       </tr>
@@ -299,8 +317,7 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
               </table>
             </div>
             <p className="table-caption">
-              * Note: Unpack strictly records missing values as <em>Not Provided</em> rather than
-              assuming zero.
+              * Note: Unpack strictly records unreadable/missing values as <em>Needs Review</em> or <em>Not Provided</em> rather than assuming zero. Both per-100g and per-serving amounts are preserved separately.
             </p>
           </div>
         </div>

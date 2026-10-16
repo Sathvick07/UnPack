@@ -71,6 +71,26 @@ export const EditableFieldsModal: React.FC<EditableFieldsModalProps> = ({
     });
   };
 
+  const handleNutritionServingChange = (key: string, valStr: string) => {
+    const num = valStr === '' ? null : parseFloat(valStr);
+    const existing = nutrition[key] || {
+      nutrient: key,
+      value: null,
+      unit: key === 'energy' ? 'kcal' : (key === 'sodium' ? 'mg' : 'g'),
+      basis: 'per_100g',
+      status: 'detected',
+      source_text: '',
+    };
+    setNutrition({
+      ...nutrition,
+      [key]: {
+        ...existing,
+        serving_value: isNaN(num as number) ? null : num,
+        serving_basis: num !== null ? 'per_serving' : '',
+      },
+    });
+  };
+
   const handleSave = () => {
     onSave(ingredients, nutrition);
     onClose();
@@ -135,23 +155,31 @@ export const EditableFieldsModal: React.FC<EditableFieldsModalProps> = ({
           </section>
 
           <section className="modal-section">
-            <h4 className="modal-section-title">Nutrition Facts (per 100g / ml)</h4>
-            <div className="nutrition-edit-grid">
-              {['energy', 'fat', 'carbohydrates', 'sugars', 'protein', 'sodium'].map((key) => {
+            <h4 className="modal-section-title">Nutrition Facts (Per 100g and Per Serving)</h4>
+            <div className="nutrition-edit-grid" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {['energy', 'fat', 'saturated_fat', 'trans_fat', 'carbohydrates', 'sugars', 'added_sugars', 'protein', 'sodium'].map((key) => {
                 const fact = nutrition[key];
                 const unit = fact?.unit || (key === 'energy' ? 'kcal' : (key === 'sodium' ? 'mg' : 'g'));
                 return (
-                  <div key={key} className="nutrition-edit-item">
-                    <label className="nutrition-label">
-                      {key.toUpperCase()} ({unit})
-                    </label>
+                  <div key={key} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 1fr', gap: '0.75rem', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '0.5rem 0.75rem', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {key.replace('_', ' ').toUpperCase()} ({unit})
+                    </span>
                     <input
                       type="number"
                       step="any"
-                      placeholder="Not Provided"
+                      placeholder="Per 100g (optional)"
                       value={fact?.value !== null && fact?.value !== undefined ? fact.value : ''}
                       onChange={(e) => handleNutritionChange(key, e.target.value)}
-                      className="input-field"
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem' }}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Per Serving (optional)"
+                      value={fact?.serving_value !== null && fact?.serving_value !== undefined ? fact.serving_value : ''}
+                      onChange={(e) => handleNutritionServingChange(key, e.target.value)}
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem' }}
                     />
                   </div>
                 );

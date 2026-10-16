@@ -72,27 +72,56 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
             })
             ingredients.append(entry)
 
-    # 3. Parse Nutrition Facts (Energy, Protein, Fat, Carbohydrates, Sugars, Sodium, etc.)
-    nutrient_patterns = [
-        ("energy", r"(?:energy|calories)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(kcal|cal|kj)?", "kcal"),
-        ("fat", r"(?:total fat|fat)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(g|mg)?", "g"),
-        ("saturated_fat", r"(?:saturated fat|saturates)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(g|mg)?", "g"),
-        ("carbohydrates", r"(?:total carbohydrate|carbohydrate|carbs)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(g|mg)?", "g"),
-        ("sugars", r"(?:total sugars|sugars|sugar)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(g|mg)?", "g"),
-        ("protein", r"(?:protein)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(g|mg)?", "g"),
-        ("sodium", r"(?:sodium|salt)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(mg|g)?", "mg"),
+    # 3. Parse Nutrition Facts with multi-column tabular support (per 100g vs per serve)
+    nutrient_definitions = [
+        ("energy", r"(?:energy|calories?|caloric value)", "kcal"),
+        ("fat", r"(?:total fat|fat)", "g"),
+        ("saturated_fat", r"(?:saturated fat|saturates)", "g"),
+        ("trans_fat", r"(?:trans fat)", "g"),
+        ("carbohydrates", r"(?:total carbohydrates?|carbohydrates?|carbs)", "g"),
+        ("sugars", r"(?:total sugars?|sugars?)", "g"),
+        ("added_sugars", r"(?:added sugars?)", "g"),
+        ("protein", r"(?:protein)", "g"),
+        ("sodium", r"(?:sodium|salt)", "mg"),
     ]
 
-    for nutrient_key, pattern, default_unit in nutrient_patterns:
+    for nutrient_key, name_regex, default_unit in nutrient_definitions:
+        # Regex captures:
+        # 1. optional unit in header like (kcal) or (g)
+        # 2. first number (per 100g column)
+        # 3. optional inline unit
+        # 4. optional second number (per serving column)
+        pattern = (
+            rf"{name_regex}"
+            rf"(?:\s*\(([^\)]+)\))?"
+            rf"\s*[:\-]?"
+            rf"\s*(\d+(?:\.\d+)?)"
+            rf"(?:\s*([a-zA-Z]+))?"
+            rf"(?:[^\d\n\r]+(\d+(?:\.\d+)?))?"
+        )
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            val = float(match.group(1))
-            unit = match.group(2) or default_unit
+            unit_in_header = match.group(1)
+            val_100g = float(match.group(2))
+            unit_after_num = match.group(3)
+            val_serving_str = match.group(4)
+            val_serving = float(val_serving_str) if val_serving_str else None
+
+            unit = unit_after_num or unit_in_header or default_unit
+            if "cal" in unit.lower() or "kj" in unit.lower():
+                unit = "kcal"
+            elif "mg" in unit.lower():
+                unit = "mg"
+            elif "g" in unit.lower():
+                unit = "g"
+
             source_snippet = match.group(0).strip()
             nutrition_facts[nutrient_key] = validate_nutrition_fact(nutrient_key, {
-                "value": val,
+                "value": val_100g,
                 "unit": unit,
                 "basis": "per_100g",
+                "serving_value": val_serving,
+                "serving_basis": "per_serving" if val_serving is not None else "",
                 "status": "detected",
                 "source_text": source_snippet,
             })
@@ -102,6 +131,8 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
                 "value": None,
                 "unit": default_unit,
                 "basis": "unknown",
+                "serving_value": None,
+                "serving_basis": "",
                 "status": "not_provided",
                 "source_text": "",
             })
@@ -115,18 +146,26 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
 def call_gemini_vision(image_bytes: bytes, mime_type: str, api_key: str) -> Optional[Dict[str, Any]]:
     """
     Calls the Gemini Multimodal API with structured JSON output schema when an API key is available.
+    Supports multi-model fallbacks (gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash).
     """
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     base64_img = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt = (
-        "Analyze this food packaging label photo. Extract with extreme accuracy:\n"
-        "1. Raw complete visible text\n"
-        "2. List of ingredients with exact source_text and whether each is detected or uncertain\n"
-        "3. Allergen warnings (contains vs may contain)\n"
-        "4. Nutrition table facts with value, unit, basis, and exact source_text. Do not infer 0 for missing items.\n"
-        "5. Any unreadable, blurry, or cropped areas with reason.\n"
-        "Output strictly valid JSON."
+        "You are an expert food packaging nutrition and allergen extraction engine.\n"
+        "Analyze this packaged food label photo. Extract with extreme accuracy:\n"
+        "1. Complete raw visible text exactly as printed.\n"
+        "2. List of ingredients with exact source_text and whether each is detected, uncertain, or unreadable.\n"
+        "3. Allergen warnings (distinguish 'contains' vs precautionary 'may contain').\n"
+        "4. Nutrition table facts: For each nutrient (energy, protein, carbohydrates, sugars, fat, saturated_fat, trans_fat, sodium):\n"
+        "   - 'value': numeric value for per-100g column (null if missing or unreadable. NEVER infer 0 for missing items)\n"
+        "   - 'unit': unit of measurement (kcal, g, mg)\n"
+        "   - 'basis': 'per_100g'\n"
+        "   - 'serving_value': numeric value for per-serving / per-pack column if printed, else null\n"
+        "   - 'serving_basis': 'per_serving' if present, else ''\n"
+        "   - 'source_text': exact row text from table (e.g. 'Energy (kcal) 524 105')\n"
+        "   - 'status': 'detected', 'uncertain', or 'not_provided'\n"
+        "5. Output strictly valid JSON matching this schema: "
+        "{'raw_text': str, 'ingredients': list, 'allergen_statements': list, 'nutrition_facts': dict}."
     )
 
     payload = {
@@ -141,20 +180,30 @@ def call_gemini_vision(image_bytes: bytes, mime_type: str, api_key: str) -> Opti
         }
     }
 
-    req = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
+    models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
+    for model_name in models_to_try:
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        req = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
 
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            candidate = data.get("candidates", [])[0]
-            text_out = candidate.get("content", {}).get("parts", [])[0].get("text", "")
-            return json.loads(text_out)
-    except Exception:
-        return None
+        try:
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidate = data.get("candidates", [])[0]
+                text_out = candidate.get("content", {}).get("parts", [])[0].get("text", "").strip()
+                if text_out.startswith("```"):
+                    text_out = re.sub(r"^```(?:json)?\s*", "", text_out)
+                    text_out = re.sub(r"\s*```$", "", text_out)
+                parsed = json.loads(text_out)
+                if isinstance(parsed, dict) and ("ingredients" in parsed or "nutrition_facts" in parsed):
+                    return parsed
+        except Exception:
+            continue
+
+    return None
 
 def analyze_label_image(
     image_bytes: bytes,
@@ -167,6 +216,7 @@ def analyze_label_image(
     Main entry point for LabelLens analysis.
     Performs image quality assessment, OCR/Vision extraction, completeness validation,
     and deterministic restriction matching.
+    Never fabricates mock data or assumes unreadable values are zero.
     """
     user_restrictions = user_restrictions or []
     user_targets = user_targets or {}
@@ -204,26 +254,38 @@ def analyze_label_image(
         parsed_data = call_gemini_vision(image_bytes, mime, api_key)
 
     if not parsed_data:
-        # Fallback to deterministic parser with client text or ground-truth inspection
-        # For realistic testing, inspect the client supplied text or standard packaging markers
         text_content = client_supplied_text or ""
-        if not text_content:
-            # If no OCR text available yet and offline, produce standard readable structure
-            text_content = (
-                "INGREDIENTS: Whole grain rolled oats, sugar, palm oil, honey, salt, natural flavor.\n"
-                "CONTAINS: Tree nuts (almonds).\n"
-                "MAY CONTAIN: Peanuts, milk.\n"
-                "NUTRITION FACTS (per 100g):\n"
-                "Energy: 450 kcal\n"
-                "Fat: 15.0 g\n"
-                "Saturated fat: 6.5 g\n"
-                "Carbohydrates: 68.0 g\n"
-                "Sugars: 22.0 g\n"
-                "Protein: 9.0 g\n"
-                "Sodium: 180 mg"
-            )
-
-        parsed_data = parse_deterministic_label(text_content, quality_tier)
+        if text_content:
+            parsed_data = parse_deterministic_label(text_content, quality_tier)
+        else:
+            # CRITICAL SAFETY RULE: NEVER FABRICATE MOCK VALUES!
+            # If no OCR text was extracted, mark all fields as unreadable / needs review
+            default_nutrients = [
+                ("energy", "kcal"),
+                ("fat", "g"),
+                ("saturated_fat", "g"),
+                ("trans_fat", "g"),
+                ("carbohydrates", "g"),
+                ("sugars", "g"),
+                ("added_sugars", "g"),
+                ("protein", "g"),
+                ("sodium", "mg"),
+            ]
+            parsed_data = {
+                "ingredients": [],
+                "allergen_statements": [],
+                "nutrition_facts": {
+                    nutrient_key: validate_nutrition_fact(nutrient_key, {
+                        "value": None,
+                        "unit": default_unit,
+                        "basis": "per_100g",
+                        "status": "unreadable",
+                        "source_text": "Uncertain / Unreadable from image",
+                    })
+                    for nutrient_key, default_unit in default_nutrients
+                },
+                "raw_text": "",
+            }
 
     ingredients = parsed_data.get("ingredients", [])
     allergen_statements = parsed_data.get("allergen_statements", [])
@@ -233,6 +295,11 @@ def analyze_label_image(
     # Step 3: Validate completeness and flags
     completeness = validate_extraction_completeness(raw_text, ingredients, nutrition_facts, quality_tier)
     uncertainty_flags = quality["warnings"] + completeness["uncertainty_flags"]
+
+    if not raw_text and not ingredients:
+        uncertainty_flags.append(
+            "Automatic extraction could not legibly verify nutrition facts from this image. Values require manual review."
+        )
 
     # Step 4: Evaluate compatibility against user profile
     findings = evaluate_compatibility(
@@ -245,15 +312,26 @@ def analyze_label_image(
         is_complete=completeness["is_complete"]
     )
 
-    # Check if manual confirmation is requested
-    has_unknowns = any(f.get("requires_manual_confirmation") for f in findings) or quality_tier != "CLEAR"
+    # Determine if manual confirmation is needed
+    has_unknowns = (
+        any(f.get("requires_manual_confirmation") for f in findings)
+        or quality_tier != "CLEAR"
+        or not completeness["is_complete"]
+        or not ingredients
+    )
+
+    retake_prompt = (
+        quality["retake_recommendations"][0]
+        if quality["retake_recommendations"]
+        else ("Could not extract label text clearly. Please retake photo with sharp focus, or use 'Edit & Correct' to enter values directly from packaging." if not raw_text else None)
+    )
 
     return {
         "file_name": file_name,
         "quality": quality,
-        "readability_status": quality_tier,
-        "is_complete": completeness["is_complete"],
-        "completeness_score": completeness["completeness_score"],
+        "readability_status": quality_tier if raw_text else "UNCERTAIN",
+        "is_complete": completeness["is_complete"] and bool(raw_text),
+        "completeness_score": completeness["completeness_score"] if raw_text else 30,
         "raw_text": raw_text,
         "ingredients": ingredients,
         "allergen_statements": allergen_statements,
@@ -261,5 +339,5 @@ def analyze_label_image(
         "findings": findings,
         "uncertainty_flags": uncertainty_flags,
         "manual_confirmation_needed": has_unknowns,
-        "retake_prompt": quality["retake_recommendations"][0] if quality["retake_recommendations"] else None,
+        "retake_prompt": retake_prompt,
     }
