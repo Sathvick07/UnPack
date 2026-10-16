@@ -4,9 +4,12 @@ import json
 from PIL import Image, ImageDraw, ImageFilter
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.contrib.auth.models import User
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
+from rest_framework.authtoken.models import Token
 
+from .models import UserProfile
 from .label_analyzer.quality import assess_image_quality
 from .label_analyzer.matching import evaluate_compatibility
 
@@ -92,9 +95,10 @@ class AnalyzeLabelEndpointTests(APITestCase):
         self.assertEqual(data["readability_status"], "CLEAR")
         
         findings = data["findings"]
-        conflict_findings = [f for f in findings if f["status"] == "CONFLICT DETECTED"]
+        conflict_findings = [f for f in findings if f["status"] in ("CONFLICT DETECTED", "Confirmed conflict")]
         self.assertEqual(len(conflict_findings), 1)
         self.assertEqual(conflict_findings[0]["restriction"], "peanut")
+        self.assertIn(conflict_findings[0]["status"], ("CONFLICT DETECTED", "Confirmed conflict"))
         self.assertIn("peanut", conflict_findings[0]["evidence"].lower())
 
     def test_no_allergen_produces_negative_confirmation_not_guarantee(self):
@@ -125,7 +129,7 @@ class AnalyzeLabelEndpointTests(APITestCase):
         
         for f in findings:
             if f.get("restriction") in ["peanut", "shellfish"]:
-                self.assertEqual(f["status"], "NO CONFLICT IDENTIFIED IN READABLE INFORMATION")
+                self.assertIn(f["status"], ["NO CONFLICT IDENTIFIED IN READABLE INFORMATION", "No match in readable information"])
                 # Must contain the safety disclaimer!
                 self.assertIn("does not guarantee", f["explanation"])
 
@@ -150,7 +154,7 @@ class AnalyzeLabelEndpointTests(APITestCase):
         self.assertEqual(data["readability_status"], "UNREADABLE")
         findings = data["findings"]
         peanut_finding = [f for f in findings if f.get("restriction") == "peanut"][0]
-        self.assertEqual(peanut_finding["status"], "UNKNOWN / VERIFY")
+        self.assertIn(peanut_finding["status"], ["UNKNOWN / VERIFY", "Missing or unreadable evidence", "Uncertain interpretation"])
         self.assertTrue(peanut_finding["requires_manual_confirmation"])
 
     def test_missing_nutrition_fact_is_not_provided_never_zero(self):
@@ -204,7 +208,7 @@ class VerifyFieldsEndpointTests(APITestCase):
         
         findings = data["findings"]
         milk_finding = [f for f in findings if f.get("restriction") == "milk"][0]
-        self.assertEqual(milk_finding["status"], "CONFLICT DETECTED")
+        self.assertIn(milk_finding["status"], ["CONFLICT DETECTED", "Confirmed conflict"])
 
         sodium_finding = [f for f in findings if f.get("target") == "sodium_max"][0]
         self.assertEqual(sodium_finding["status"], "PREFERENCE MISMATCH")
@@ -266,9 +270,9 @@ class Mission2EdgeCaseTests(APITestCase):
         self.assertTrue(any("unreadable" in f.lower() or "obscured" in f.lower() for f in data["uncertainty_flags"]))
 
         # For peanut (which was not explicitly seen), because an ingredient is obscured,
-        # it MUST NOT claim "NO CONFLICT IDENTIFIED"! It must report UNKNOWN / VERIFY
+        # it MUST NOT claim "NO CONFLICT IDENTIFIED"! It must report UNKNOWN / VERIFY or Missing/Unreadable
         peanut_finding = [f for f in data["findings"] if f.get("restriction") == "peanut"][0]
-        self.assertEqual(peanut_finding["status"], "UNKNOWN / VERIFY")
+        self.assertIn(peanut_finding["status"], ["UNKNOWN / VERIFY", "Missing or unreadable evidence", "Uncertain interpretation"])
         self.assertTrue(peanut_finding["requires_manual_confirmation"])
 
     def test_missing_allergen_declaration_flagged(self):
@@ -520,7 +524,7 @@ class Mission2EdgeCaseTests(APITestCase):
         self.assertEqual(len(findings), 1)
 
         milk_finding = findings[0]
-        self.assertEqual(milk_finding["status"], "CONFLICT DETECTED")
+        self.assertIn(milk_finding["status"], ["CONFLICT DETECTED", "Confirmed conflict"])
         self.assertEqual(milk_finding["severity"], "CRITICAL")
         self.assertIn("Allergen statement:", milk_finding["evidence"])
         self.assertIn("Ingredient list:", milk_finding["evidence"])
@@ -587,7 +591,7 @@ class Mission2EdgeCaseTests(APITestCase):
         data = response.json()
         gluten_finding = next((f for f in data["findings"] if f.get("id") == "gluten" or "Gluten" in f.get("restriction", "")), None)
         self.assertIsNotNone(gluten_finding)
-        self.assertEqual(gluten_finding["status"], "CONFLICT DETECTED")
+        self.assertIn(gluten_finding["status"], ["CONFLICT DETECTED", "Confirmed conflict"])
         self.assertEqual(gluten_finding["severity"], "CRITICAL")
         self.assertIn("CONTAINS MILK, WHEAT AND SOY", gluten_finding["evidence"])
 
@@ -618,7 +622,7 @@ class Mission2EdgeCaseTests(APITestCase):
         data = response.json()
         peanut_finding = next((f for f in data["findings"] if f.get("id") == "peanut" or "Peanut" in f.get("restriction", "")), None)
         self.assertIsNotNone(peanut_finding)
-        self.assertEqual(peanut_finding["status"], "NO CONFLICT IDENTIFIED IN READABLE INFORMATION")
+        self.assertIn(peanut_finding["status"], ["NO CONFLICT IDENTIFIED IN READABLE INFORMATION", "No match in readable information"])
         self.assertIn("does not guarantee", peanut_finding["explanation"].lower())
 
     def test_clarity_score_clear_vs_blurred_images(self):
@@ -686,6 +690,454 @@ class Mission2EdgeCaseTests(APITestCase):
         self.assertLessEqual(quality.get("quality_score"), 55)
         self.assertTrue(any("blurry" in w.lower() for w in quality.get("warnings", [])))
         self.assertTrue(any("blurry" in r.lower() or "focus" in r.lower() for r in quality.get("retake_recommendations", [])))
+
+
+class UserAuthenticationTests(APITestCase):
+    """
+    Tests for user registration, login, logout, and token authentication.
+    """
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('auth-register')
+        self.login_url = reverse('auth-login')
+        self.logout_url = reverse('auth-logout')
+        self.me_url = reverse('auth-me')
+
+    def test_user_registration_success(self):
+        payload = {
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!"
+        }
+        response = self.client.post(self.register_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("token", response.data)
+        self.assertIn("user", response.data)
+        self.assertEqual(response.data["user"]["email"], "jane@example.com")
+        self.assertEqual(response.data["user"]["profile"]["full_name"], "Jane Doe")
+        self.assertFalse(response.data["user"]["profile"]["onboarding_completed"])
+
+    def test_registration_mismatched_passwords(self):
+        payload = {
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "password": "Password123!",
+            "confirm_password": "DifferentPassword!"
+        }
+        response = self.client.post(self.register_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("confirm_password", response.data.get("errors", {}))
+
+    def test_registration_duplicate_email(self):
+        User.objects.create_user(username="jane@example.com", email="jane@example.com", password="Password123!")
+        payload = {
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!"
+        }
+        response = self.client.post(self.register_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data.get("errors", {}))
+
+    def test_user_login_success(self):
+        user = User.objects.create_user(username="alex@example.com", email="alex@example.com", password="SecurePassword123")
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.full_name = "Alex Smith"
+        profile.save()
+
+        payload = {
+            "email": "alex@example.com",
+            "password": "SecurePassword123"
+        }
+        response = self.client.post(self.login_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("token", response.data)
+        self.assertEqual(response.data["user"]["email"], "alex@example.com")
+
+    def test_user_login_invalid_password(self):
+        user = User.objects.create_user(username="alex@example.com", email="alex@example.com", password="SecurePassword123")
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.full_name = "Alex Smith"
+        profile.save()
+        payload = {
+            "email": "alex@example.com",
+            "password": "WrongPassword"
+        }
+        response = self.client.post(self.login_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_get_current_user_authenticated(self):
+        user = User.objects.create_user(username="sam@example.com", email="sam@example.com", password="Password123!")
+        token, _ = Token.objects.get_or_create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get(self.me_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["email"], "sam@example.com")
+
+    def test_get_current_user_unauthenticated(self):
+        response = self.client.get(self.me_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_logout_invalidates_token(self):
+        user = User.objects.create_user(username="logout_user@example.com", email="logout_user@example.com", password="Password123!")
+        token, _ = Token.objects.get_or_create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        logout_response = self.client.post(self.logout_url)
+        self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
+
+        # Subsequent authenticated request with old token should now fail
+        subsequent_response = self.client.get(self.me_url)
+        self.assertEqual(subsequent_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class UserProfileAndOnboardingTests(APITestCase):
+    """
+    Tests for profile retrieval, updating dietary preferences, and multi-user isolation.
+    """
+    def setUp(self):
+        self.client = APIClient()
+        self.profile_url = reverse('user-profile')
+        self.user = User.objects.create_user(username="profile_user@example.com", email="profile_user@example.com", password="Password123!")
+        self.token, _ = Token.objects.get_or_create(user=self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    def test_update_profile_and_complete_onboarding(self):
+        payload = {
+            "age_range": "25-34",
+            "height_cm": 175.5,
+            "weight_kg": 70.0,
+            "allergy_status": "specified",
+            "allergies": ["peanut", "tree_nut", "sesame"],
+            "dietary_preferences": ["vegan", "low_sugar"],
+            "health_conditions": ["hypertension"],
+            "onboarding_completed": True
+        }
+        response = self.client.put(self.profile_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        profile_data = response.data["profile"]
+        self.assertEqual(profile_data["age_range"], "25-34")
+        self.assertEqual(profile_data["height_cm"], 175.5)
+        self.assertEqual(profile_data["allergy_status"], "specified")
+        self.assertEqual(profile_data["allergies"], ["peanut", "tree_nut", "sesame"])
+        self.assertTrue(profile_data["onboarding_completed"])
+
+    def test_allergy_status_distinctions(self):
+        # 1. No known allergies reported
+        res1 = self.client.patch(self.profile_url, {"allergy_status": "none", "allergies": []}, format="json")
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res1.data["profile"]["allergy_status"], "none")
+        self.assertEqual(res1.data["profile"]["allergies"], [])
+
+        # 2. Uncertain allergy information
+        res2 = self.client.patch(self.profile_url, {"allergy_status": "uncertain", "allergies": []}, format="json")
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res2.data["profile"]["allergy_status"], "uncertain")
+
+        # 3. No answer provided
+        res3 = self.client.patch(self.profile_url, {"allergy_status": "unanswered", "allergies": []}, format="json")
+        self.assertEqual(res3.status_code, status.HTTP_200_OK)
+        self.assertEqual(res3.data["profile"]["allergy_status"], "unanswered")
+
+    def test_profile_isolation_between_users(self):
+        # Create second user
+        user2 = User.objects.create_user(username="other@example.com", email="other@example.com", password="Password123!")
+        token2, _ = Token.objects.get_or_create(user=user2)
+        profile2, _ = UserProfile.objects.get_or_create(user=user2)
+        profile2.allergies = ["milk", "egg"]
+        profile2.save()
+
+        # User 1 fetches profile
+        res1 = self.client.get(self.profile_url)
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertNotEqual(res1.data["allergies"], ["milk", "egg"])
+
+        # Switch credentials to User 2
+        client2 = APIClient()
+        client2.credentials(HTTP_AUTHORIZATION=f"Token {token2.key}")
+        res2 = client2.get(self.profile_url)
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res2.data["allergies"], ["milk", "egg"])
+
+
+class Mission3EvidenceAndContradictionTests(APITestCase):
+    """
+    Dedicated automated tests for Mission 3:
+    1. A confirmed allergen match with exact evidence.
+    2. AI interpretation contradicting explicit label text.
+    3. An ambiguous ingredient remaining uncertain.
+    4. Missing evidence not producing a fabricated claim.
+    5. A no-match result not claiming allergen-free status.
+    6. AI nutrition fabrication detection and unresolved contradictions.
+    """
+    def setUp(self):
+        self.analyze_url = reverse('analyze-label')
+        self.verify_url = reverse('verify-fields')
+
+    def test_confirmed_allergen_match_with_exact_evidence(self):
+        """
+        Mission 3 Test 1: A confirmed allergen match must show exact supporting label text,
+        attach the bounding box, report status 'Confirmed conflict', and require no manual confirmation.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("peanut_butter.jpg", img_bytes, content_type="image/jpeg")
+
+        label_text = (
+            "INGREDIENTS: Roasted peanuts (90%), brown cane sugar, palm oil, iodized salt.\n"
+            "CONTAINS: Peanuts.\n"
+            "NUTRITION FACTS: Energy 580 kcal, Protein 24g, Total Fat 48g."
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": label_text,
+                "restrictions": json.dumps(["peanut"]),
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        findings = [f for f in data["findings"] if f.get("id") == "peanut" or "peanut" in f.get("restriction", "").lower()]
+        self.assertEqual(len(findings), 1)
+
+        peanut_finding = findings[0]
+        # Verify standardized Mission 3 status
+        self.assertEqual(peanut_finding["result_status"], "Confirmed conflict")
+        self.assertIn(peanut_finding["status"], ["Confirmed conflict", "CONFLICT DETECTED"])
+        self.assertEqual(peanut_finding["severity"], "CRITICAL")
+        self.assertFalse(peanut_finding["requires_manual_confirmation"])
+
+        # Verify exact supporting label text is preserved
+        self.assertTrue(len(peanut_finding["supporting_text"]) > 0)
+        self.assertTrue(
+            "peanuts" in peanut_finding["supporting_text"].lower()
+            or "peanuts" in peanut_finding["evidence"].lower()
+        )
+        self.assertIn("Allergen statement:", peanut_finding["evidence"])
+        self.assertIn("Ingredient list:", peanut_finding["evidence"])
+
+    def test_ai_interpretation_contradicting_explicit_label_text(self):
+        """
+        Mission 3 Test 2: When an AI interpretation or marketing claim asserts 'Gluten-Free' or 'Dairy-Free',
+        but explicit label ingredients declare wheat/milk, the engine must detect the contradiction,
+        NEVER silently trust the AI claim, and report status 'Unresolved contradiction'.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("contradictory_cookies.jpg", img_bytes, content_type="image/jpeg")
+
+        # Explicit label text has wheat flour and contains wheat
+        cookies_text = (
+            "GLUTEN-FREE COOKIES\n"
+            "INGREDIENTS: Wheat flour, sugar, butter, baking soda, salt.\n"
+            "CONTAINS: Wheat, Milk.\n"
+            "NUTRITION FACTS: Energy 450 kcal, Protein 5g."
+        )
+
+        # AI interpretation claims product is gluten free and safe for gluten
+        ai_claims = {
+            "claims": ["Gluten-Free"],
+            "gluten_free": True,
+            "safe_for": ["gluten"],
+            "allergens_absent": ["gluten", "wheat"],
+        }
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": cookies_text,
+                "restrictions": json.dumps(["gluten", "milk"]),
+                "ai_interpretation": json.dumps(ai_claims),
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+
+        # Verify contradictions are captured in response
+        contradictions = data.get("contradictions", [])
+        self.assertTrue(len(contradictions) > 0)
+        gluten_contra = next((c for c in contradictions if "gluten" in c["id"].lower() or "wheat" in c["id"].lower()), None)
+        self.assertIsNotNone(gluten_contra)
+        self.assertEqual(gluten_contra["status"], "Unresolved contradiction")
+        self.assertEqual(gluten_contra["severity"], "CRITICAL")
+        self.assertIn("wheat", gluten_contra["supporting_text"].lower())
+
+        # Verify the finding for gluten reflects the unresolved contradiction
+        findings = data["findings"]
+        gluten_finding = next((f for f in findings if f.get("id") == "gluten" or "gluten" in f.get("restriction", "").lower()), None)
+        self.assertIsNotNone(gluten_finding)
+        self.assertEqual(gluten_finding["result_status"], "Unresolved contradiction")
+        self.assertEqual(gluten_finding["status"], "Unresolved contradiction")
+        self.assertTrue(gluten_finding["is_contradiction"])
+        self.assertTrue(gluten_finding["requires_manual_confirmation"])
+        self.assertIn("Wheat flour", gluten_finding["supporting_text"])
+
+    def test_ambiguous_ingredient_remains_uncertain(self):
+        """
+        Mission 3 Test 3: An ambiguous ingredient (e.g. 'natural flavors', 'spices', 'modified starch')
+        cannot rule out restricted allergens. Status must remain 'Uncertain interpretation' and
+        require user manual confirmation rather than assuming safe.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("tortilla_chips.jpg", img_bytes, content_type="image/jpeg")
+
+        label_with_ambiguous = (
+            "INGREDIENTS: Whole corn, vegetable oil, natural flavors, spices, sea salt.\n"
+            "NUTRITION FACTS: Energy 140 kcal, Sodium 110mg."
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": label_with_ambiguous,
+                "restrictions": json.dumps(["mustard"]),
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+
+        # Ambiguous ingredient list should identify natural flavors and spices
+        ambiguous = data.get("ambiguous_ingredients", [])
+        self.assertTrue(len(ambiguous) >= 1)
+        ambig_names = [a["source_text"].lower() for a in ambiguous]
+        self.assertTrue(any("natural flavors" in n or "spices" in n for n in ambig_names))
+
+        findings = data["findings"]
+        mustard_finding = next((f for f in findings if f.get("id") == "mustard" or "mustard" in f.get("restriction", "").lower()), None)
+        self.assertIsNotNone(mustard_finding)
+        self.assertEqual(mustard_finding["result_status"], "Uncertain interpretation")
+        self.assertEqual(mustard_finding["status"], "Uncertain interpretation")
+        self.assertTrue(mustard_finding["requires_manual_confirmation"])
+        self.assertTrue("natural flavors" in mustard_finding["supporting_text"].lower() or "spices" in mustard_finding["supporting_text"].lower())
+
+    def test_missing_evidence_does_not_produce_fabricated_claim(self):
+        """
+        Mission 3 Test 4: Missing or unreadable evidence must NEVER produce fabricated claims,
+        invented ingredients, or assumed zero values. Status must be 'Missing or unreadable evidence'.
+        """
+        # Create unreadable tiny image (100x100 is below 350px min threshold)
+        img_bytes = create_dummy_image(width=100, height=100)
+        image_file = SimpleUploadedFile("tiny_missing.jpg", img_bytes, content_type="image/jpeg")
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "restrictions": json.dumps(["peanut", "tree_nut"]),
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(data["readability_status"], "UNREADABLE")
+        self.assertEqual(data["ingredients"], [])
+        self.assertTrue(data["manual_confirmation_needed"])
+
+        # Nutrition facts must not be fabricated (empty or values None)
+        for nut_k, nut_fact in data["nutrition_facts"].items():
+            self.assertIsNone(nut_fact.get("value"))
+
+        # Restrictions must not claim allergen-free
+        for f in data["findings"]:
+            self.assertEqual(f["result_status"], "Missing or unreadable evidence")
+            self.assertTrue(f["requires_manual_confirmation"])
+
+    def test_no_match_result_never_claims_allergen_free(self):
+        """
+        Mission 3 Test 5: A clear label with no matching allergens must report
+        'No match in readable information' and must NEVER claim the product is 100% allergen-free.
+        It must include an explicit disclaimer that unread hazards cannot be guaranteed absent.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("pure_granola.jpg", img_bytes, content_type="image/jpeg")
+
+        granola_text = (
+            "INGREDIENTS: Rolled oats, maple syrup, coconut flakes, chia seeds, sea salt.\n"
+            "NUTRITION FACTS: Energy 220 kcal, Protein 6g, Sodium 45mg."
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": granola_text,
+                "restrictions": json.dumps(["peanut"]),
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        findings = [f for f in data["findings"] if f.get("id") == "peanut" or "peanut" in f.get("restriction", "").lower()]
+        self.assertEqual(len(findings), 1)
+
+        peanut_finding = findings[0]
+        self.assertEqual(peanut_finding["result_status"], "No match in readable information")
+        self.assertEqual(peanut_finding["severity"], "INFO")
+        self.assertFalse(peanut_finding["requires_manual_confirmation"])
+
+        # CRITICAL SAFETY INVARIANT: Never claim product is allergen-free!
+        expl_lower = peanut_finding["explanation"].lower()
+        self.assertNotIn("product is allergen-free", expl_lower)
+        self.assertNotIn("guaranteed allergen-free", expl_lower)
+        self.assertIn("does not guarantee", expl_lower)
+
+    def test_ai_hallucinated_nutrition_contradiction_detected(self):
+        """
+        Mission 3 Test 6: If AI interpretation reports fabricated nutrient quantities
+        for fields omitted from the packaging table, the engine rejects them as contradictions.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("bread.jpg", img_bytes, content_type="image/jpeg")
+
+        bread_text = (
+            "INGREDIENTS: Whole wheat flour, water, yeast, salt.\n"
+            "NUTRITION FACTS: Energy 250 kcal, Protein 8g."
+        )
+
+        # AI hallucinates that sugars are 0.0 and sodium is 5mg
+        ai_data = {
+            "nutrition_facts": {
+                "sugars": 0.0,
+                "sodium": 5.0,
+            }
+        }
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "raw_text": bread_text,
+                "ai_interpretation": json.dumps(ai_data),
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+
+        # Contradictions should catch the hallucinated nutrients
+        contradictions = data.get("contradictions", [])
+        hallucinated_types = [c["contradiction_type"] for c in contradictions]
+        self.assertIn("AI_FABRICATION_VS_EVIDENCE", hallucinated_types)
+
+        # Invariant: the actual nutrition table must remain not_provided, NOT adopting hallucination
+        self.assertIsNone(data["nutrition_facts"]["sugars"]["value"])
+        self.assertEqual(data["nutrition_facts"]["sugars"]["status"], "not_provided")
+
 
 
 

@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     # Third-party apps
     'corsheaders',
     'rest_framework',
+    'rest_framework.authtoken',
     # Local apps
     'api',
 ]
@@ -140,6 +141,10 @@ CORS_ALLOWED_ORIGINS = [
 
 # Django REST Framework configuration
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],

@@ -2,10 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2310b981'><path d='M21 16.5l-9 5.2-9-5.2V7.5l9-5.2 9 5.2v9z'/></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Unpack — Know What's Inside. Food label analysis, allergy conflict detection, and nutrition tracking." />
-    <title>Unpack — Know What's Inside.</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='10' fill='%23173F35'/><path d='M6 15V8H15M33 6H42V15M6 33V42H15M33 42H42V33' stroke='%23C8E68B' stroke-width='3' stroke-linecap='round'/><path d='M14 16V26C14 31 18 35 24 35C30 35 34 31 34 26V16' stroke='%23FFFFFF' stroke-width='3.5' stroke-linecap='round'/></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="UnPack — Know What's Inside. Food label scanning, ingredient analysis, allergen awareness, and verified nutrition facts." />
+    <title>UnPack — Know What's Inside.</title>
+    <!-- Modern typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Immediate theme application to prevent any theme flash -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('unpack_theme_mode');
+          var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

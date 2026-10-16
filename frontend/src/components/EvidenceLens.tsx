@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { LabelAnalysisReport, ExtractedIngredient, NutritionFact, CompatibilityFinding } from '../types/label';
+import {
+  LabelAnalysisReport,
+  ExtractedIngredient,
+  NutritionFact,
+  CompatibilityFinding,
+} from '../types/label';
 import { verifyFields } from '../api/client';
 import { QualityWarningBanner } from './QualityWarningBanner';
 import { ManualConfirmationCard } from './ManualConfirmationCard';
@@ -19,6 +24,10 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
   onUpdateReport,
 }) => {
   const [selectedIngredient, setSelectedIngredient] = useState<ExtractedIngredient | null>(null);
+  const [selectedHighlight, setSelectedHighlight] = useState<{
+    title: string;
+    bbox: [number, number, number, number] | null;
+  } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
@@ -36,11 +45,17 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
       if (f.restriction === restriction) {
         return {
           ...f,
-          status: 'CONFLICT DETECTED',
+          status: 'Confirmed conflict',
+          result_status: 'Confirmed conflict',
+          legacy_status: 'CONFLICT DETECTED',
           severity: 'CRITICAL' as const,
           explanation: `Manually confirmed by user: Contains ${restriction}.`,
           evidence: 'User manual confirmation',
+          supporting_text: 'Verified by user on physical packaging',
+          evidence_snippet: 'Verified by user on physical packaging',
           requires_manual_confirmation: false,
+          user_confirmed: true,
+          confirmation_type: 'manual_confirmed' as const,
         };
       }
       return f;
@@ -58,11 +73,17 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
       if (f.restriction === restriction) {
         return {
           ...f,
-          status: 'NO CONFLICT IDENTIFIED IN READABLE INFORMATION',
+          status: 'No match in readable information',
+          result_status: 'No match in readable information',
+          legacy_status: 'NO CONFLICT IDENTIFIED IN READABLE INFORMATION',
           severity: 'INFO' as const,
-          explanation: `Manually checked by user: Confirmed free from ${restriction}.`,
+          explanation: `Manually checked by user: Confirmed free from ${restriction}. (Notice: Manual visual check does not replace lab testing)`,
           evidence: 'User visual verification',
+          supporting_text: 'Verified by user on physical packaging',
+          evidence_snippet: 'Verified by user on physical packaging',
           requires_manual_confirmation: false,
+          user_confirmed: true,
+          confirmation_type: 'manual_confirmed' as const,
         };
       }
       return f;
@@ -104,6 +125,8 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
         allergen_statements: verified.allergen_statements,
         nutrition_facts: verified.nutrition_facts,
         findings: verified.findings,
+        contradictions: verified.contradictions || report.contradictions,
+        ambiguous_ingredients: verified.ambiguous_ingredients || report.ambiguous_ingredients,
         is_complete: verified.is_complete,
         completeness_score: verified.completeness_score,
         uncertainty_flags: verified.uncertainty_flags,
@@ -119,10 +142,13 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
         if (hasConflict) {
           return {
             ...f,
-            status: 'CONFLICT DETECTED',
+            status: 'Confirmed conflict',
+            result_status: 'Confirmed conflict',
+            legacy_status: 'CONFLICT DETECTED',
             severity: 'CRITICAL' as const,
             explanation: `Ingredient matching '${f.restriction}' found in verified ingredients.`,
             evidence: updatedIngredients.find((ing) => ing.name.toLowerCase().includes(rest))?.name || '',
+            supporting_text: updatedIngredients.find((ing) => ing.name.toLowerCase().includes(rest))?.name || '',
             requires_manual_confirmation: false,
           };
         }
@@ -157,8 +183,29 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
 
   // Split findings into Allergen and Nutrient target categories
   const allergenFindings = uniqueFindings.filter((f) => !f.target);
-  const conflictCount = allergenFindings.filter((f) => f.status === 'CONFLICT DETECTED').length;
-  const uncertainCount = allergenFindings.filter((f) => f.status.includes('UNKNOWN') || f.status.includes('PRECAUTIONARY')).length;
+  const conflictCount = allergenFindings.filter(
+    (f) =>
+      f.status === 'Confirmed conflict' ||
+      f.status === 'CONFLICT DETECTED' ||
+      f.result_status === 'Confirmed conflict'
+  ).length;
+
+  const contradictionCount = (report.contradictions?.length || 0) +
+    allergenFindings.filter(
+      (f) =>
+        f.status === 'Unresolved contradiction' ||
+        f.result_status === 'Unresolved contradiction' ||
+        f.is_contradiction
+    ).length;
+
+  const uncertainCount = allergenFindings.filter(
+    (f) =>
+      f.status.includes('Uncertain') ||
+      f.status.includes('UNKNOWN') ||
+      f.status.includes('PRECAUTIONARY') ||
+      f.status.includes('Precautionary') ||
+      f.status.includes('Missing')
+  ).length;
 
   // Extract shared packaging allergen statements (e.g. "CONTAINS MILK, WHEAT AND SOY.")
   const sharedAllergenStatements = Array.from(
@@ -168,6 +215,10 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
         .filter(Boolean)
     )
   );
+
+  // Active bounding box coordinates (from selected ingredient or selected finding)
+  const activeBbox = selectedHighlight?.bbox || selectedIngredient?.bounding_box;
+  const activeHighlightTitle = selectedHighlight?.title || selectedIngredient?.name;
 
   return (
     <div className="evidence-lens-container">
@@ -205,24 +256,26 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
             <div className="image-viewer-container">
               {previewUrl ? (
                 <div className="image-viewport" onClick={() => setIsLightboxOpen(true)}>
-                  <img
-                    src={previewUrl}
-                    alt="Uploaded food packaging label"
-                    className="label-evidence-photo"
-                  />
-                  {selectedIngredient?.bounding_box && (
-                    <div
-                      className="bounding-box-overlay"
-                      style={{
-                        top: `${selectedIngredient.bounding_box[0] * 100}%`,
-                        left: `${selectedIngredient.bounding_box[1] * 100}%`,
-                        height: `${(selectedIngredient.bounding_box[2] - selectedIngredient.bounding_box[0]) * 100}%`,
-                        width: `${(selectedIngredient.bounding_box[3] - selectedIngredient.bounding_box[1]) * 100}%`,
-                      }}
-                    >
-                      <span className="overlay-tag">{selectedIngredient.name}</span>
-                    </div>
-                  )}
+                  <div className="image-stage-wrapper">
+                    <img
+                      src={previewUrl}
+                      alt="Uploaded food packaging label"
+                      className="label-evidence-photo"
+                    />
+                    {activeBbox && (
+                      <div
+                        className="bounding-box-overlay"
+                        style={{
+                          top: `${activeBbox[0] * 100}%`,
+                          left: `${activeBbox[1] * 100}%`,
+                          height: `${(activeBbox[2] - activeBbox[0]) * 100}%`,
+                          width: `${(activeBbox[3] - activeBbox[1]) * 100}%`,
+                        }}
+                      >
+                        <span className="overlay-tag">{activeHighlightTitle}</span>
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     className="btn-lightbox-trigger"
@@ -237,15 +290,18 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
 
               <div className="image-viewer-footer">
                 <span className="hint-text">
-                  {selectedIngredient
-                    ? `Inspecting: "${selectedIngredient.name}" (Highlighted on label)`
-                    : 'Click any extracted ingredient to locate it on the packaging'}
+                  {activeHighlightTitle
+                    ? `Inspecting: "${activeHighlightTitle}" (Highlighted on label)`
+                    : 'Click any extracted ingredient or finding to locate it on the packaging'}
                 </span>
-                {selectedIngredient && (
+                {(selectedIngredient || selectedHighlight) && (
                   <button
                     type="button"
                     className="btn-clear-selection"
-                    onClick={() => setSelectedIngredient(null)}
+                    onClick={() => {
+                      setSelectedIngredient(null);
+                      setSelectedHighlight(null);
+                    }}
                   >
                     Clear Highlight
                   </button>
@@ -261,7 +317,7 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
           <div className="card-panel summary-overview-card">
             <div className="summary-header">
               <div>
-                <span className="section-label">Scan Summary</span>
+                <span className="section-label">Scan Summary (Mission 3 Grounded Engine)</span>
                 <h3 className="summary-title">Label Analysis Overview</h3>
               </div>
               <div className="summary-badge-group">
@@ -273,11 +329,18 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                     ⚠️ {conflictCount} {conflictCount === 1 ? 'Conflict' : 'Conflicts'} Detected
                   </span>
                 )}
+                {contradictionCount > 0 && (
+                  <span className="status-pill pill-critical">
+                    ⚡ {contradictionCount} {contradictionCount === 1 ? 'Contradiction' : 'Contradictions'}
+                  </span>
+                )}
               </div>
             </div>
 
             <p className="summary-description">
-              {conflictCount > 0
+              {contradictionCount > 0
+                ? `Alert: Disagreement detected between AI interpretation / marketing claims and explicit packaging text. Source label evidence takes strict precedence.`
+                : conflictCount > 0
                 ? `Safety warning: Found ${conflictCount} confirmed dietary conflict${conflictCount > 1 ? 's' : ''} with your active restrictions. Check packaging details below before consuming.`
                 : uncertainCount > 0
                 ? 'Notice: Certain fields or text sections could not be legibly resolved. Review uncertain items and verify physical packaging.'
@@ -285,12 +348,70 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
             </p>
           </div>
 
-          {/* Section 2: Compact Allergen Safety Summary */}
+          {/* Section 2: Contradiction Detection Card (Mission 3 Core Requirement) */}
+          {((report.contradictions && report.contradictions.length > 0) ||
+            allergenFindings.some((f) => f.is_contradiction || f.status === 'Unresolved contradiction')) && (
+            <div className="card-panel contradiction-card-panel">
+              <div className="panel-header contradiction-header">
+                <div className="header-title-group">
+                  <span className="header-icon">⚡</span>
+                  <h3 className="panel-title">Contradiction Alert: AI / Marketing vs. Source Text</h3>
+                </div>
+                <span className="badge-pill pill-critical">
+                  Unresolved Contradiction
+                </span>
+              </div>
+
+              <div className="contradiction-banner-box">
+                <p>
+                  <strong>Clinical Safety Rule:</strong> UnPack strictly rejects AI hallucinations and promotional packaging claims whenever they contradict the explicit ingredient declaration or nutrition table.
+                </p>
+              </div>
+
+              <div className="contradictions-list">
+                {report.contradictions?.map((c) => (
+                  <div key={c.id} className="contradiction-item-box">
+                    <div className="contradiction-comparison-row">
+                      <div className="contradiction-bubble claim-bubble">
+                        <span className="bubble-label">AI / Promotional Claim</span>
+                        <strong>"{c.claim_text || c.claim_label}"</strong>
+                      </div>
+                      <div className="contradiction-vs-badge">VS</div>
+                      <div className="contradiction-bubble evidence-bubble">
+                        <span className="bubble-label">Explicit Label Evidence</span>
+                        <strong>"{c.supporting_text}"</strong>
+                      </div>
+                    </div>
+                    <div className="contradiction-verdict-box">
+                      <span className="verdict-tag">Status: Unresolved contradiction</span>
+                      <p className="verdict-explanation">{c.explanation}</p>
+                      {c.bounding_box && (
+                        <button
+                          type="button"
+                          className="btn-locate-evidence-inline"
+                          onClick={() => {
+                            setSelectedHighlight({
+                              title: c.claim_label,
+                              bbox: c.bounding_box || null,
+                            });
+                          }}
+                        >
+                          📍 Highlight Label Evidence
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section 3: Evidence-Grounded Allergen Safety Findings */}
           <div className="card-panel allergen-safety-card">
             <div className="panel-header">
               <div className="header-title-group">
                 <span className="header-icon">🛡️</span>
-                <h3 className="panel-title">Allergen Safety Summary</h3>
+                <h3 className="panel-title">Evidence-Grounded Allergen Comparison</h3>
               </div>
               <span className="badge-pill">
                 {allergenFindings.length} Checked
@@ -312,30 +433,50 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
               </div>
             )}
 
-            {/* Compact Allergen Rows */}
+            {/* Compact Allergen Rows adhering to the 6 Standardized Statuses */}
             <div className="allergen-items-list">
               {allergenFindings.map((finding) => {
                 const fid = finding.id || finding.restriction || 'unknown';
                 const isExpanded = !!expandedFindings[fid];
-                const isConflict = finding.status === 'CONFLICT DETECTED';
-                const isPrecautionary = finding.status.includes('PRECAUTIONARY');
-                const isUnknown = finding.status.includes('UNKNOWN');
+                const statusStr = finding.result_status || finding.status;
 
-                const rowStatusClass = isConflict
+                const isConflict =
+                  statusStr === 'Confirmed conflict' || statusStr === 'CONFLICT DETECTED';
+                const isContradiction =
+                  statusStr === 'Unresolved contradiction' || finding.is_contradiction;
+                const isPrecautionary =
+                  statusStr === 'Precautionary notice' || statusStr.includes('PRECAUTIONARY');
+                const isUncertain =
+                  statusStr === 'Uncertain interpretation' || statusStr.includes('UNCERTAIN');
+                const isMissing =
+                  statusStr === 'Missing or unreadable evidence' || statusStr.includes('UNKNOWN');
+
+                const rowStatusClass = isContradiction
+                  ? 'row-status-contradiction'
+                  : isConflict
                   ? 'row-status-conflict'
                   : isPrecautionary
                   ? 'row-status-precautionary'
-                  : isUnknown
-                  ? 'row-status-unknown'
+                  : isUncertain
+                  ? 'row-status-uncertain'
+                  : isMissing
+                  ? 'row-status-missing'
                   : 'row-status-clear';
 
-                const badgeText = isConflict
-                  ? 'Confirmed Match'
+                const badgeText = isContradiction
+                  ? 'Unresolved Contradiction'
+                  : isConflict
+                  ? 'Confirmed Conflict'
                   : isPrecautionary
                   ? 'Precautionary Notice'
-                  : isUnknown
-                  ? 'Uncertain — Verify'
-                  : 'Not Found in Readable Info';
+                  : isUncertain
+                  ? 'Uncertain Interpretation'
+                  : isMissing
+                  ? 'Missing / Unreadable Evidence'
+                  : 'No Match in Readable Information';
+
+                const isUserConfirmed =
+                  finding.confirmation_type === 'manual_confirmed' || finding.user_confirmed;
 
                 return (
                   <div key={fid} className={`allergen-row ${rowStatusClass}`}>
@@ -345,6 +486,15 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                         <strong className="allergen-title">
                           {finding.display_name || finding.restriction}
                         </strong>
+                        {isUserConfirmed ? (
+                          <span className="badge-source-user" title="Verified by user on packaging">
+                            👤 User Confirmed
+                          </span>
+                        ) : (
+                          <span className="badge-source-machine" title="Extracted from OCR label evidence">
+                            🔍 Machine Verified
+                          </span>
+                        )}
                       </div>
 
                       <div className="allergen-status-block">
@@ -360,6 +510,31 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                       </div>
                     </div>
 
+                    {/* Exact Supporting Text Snippet (Mission 3 Core Requirement) */}
+                    {(finding.supporting_text || finding.evidence) && (
+                      <div className="supporting-evidence-box">
+                        <span className="supporting-evidence-tag">Exact Supporting Text:</span>
+                        <span className="supporting-evidence-quote">
+                          "{finding.supporting_text || finding.evidence}"
+                        </span>
+                        {finding.bounding_box && (
+                          <button
+                            type="button"
+                            className="btn-locate-inline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedHighlight({
+                                title: finding.display_name || finding.restriction || 'Allergen',
+                                bbox: finding.bounding_box || null,
+                              });
+                            }}
+                          >
+                            📍 Show on Photo
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Inline Action Recommendation */}
                     {finding.action_recommendation && (
                       <div className="allergen-action-snippet">
@@ -371,11 +546,16 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                     {isExpanded && (
                       <div className="allergen-expanded-details">
                         <p className="details-explanation">{finding.explanation}</p>
-                        {finding.evidence && (
-                          <div className="details-evidence">
-                            <strong>Source Evidence:</strong> "{finding.evidence}"
-                          </div>
-                        )}
+                        <div className="details-evidence">
+                          <strong>Decision Basis:</strong> {finding.evidence}
+                        </div>
+                        <div className="details-meta-row">
+                          <span><strong>Source Type:</strong> {finding.source_type}</span>
+                          <span>
+                            <strong>Evidence Grounding:</strong>{' '}
+                            {isUserConfirmed ? 'User Manual Visual Inspection' : 'Machine Packaging Text Alignment'}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -384,7 +564,34 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
             </div>
           </div>
 
-          {/* Section 3: Extracted Ingredients */}
+          {/* Section 4: Ambiguous Ingredients Callout (if any) */}
+          {report.ambiguous_ingredients && report.ambiguous_ingredients.length > 0 && (
+            <div className="card-panel ambiguous-card-panel">
+              <div className="panel-header">
+                <div className="header-title-group">
+                  <span className="header-icon">❓</span>
+                  <h3 className="panel-title">Ambiguous Ingredients Detected</h3>
+                </div>
+                <span className="badge-pill">
+                  {report.ambiguous_ingredients.length} Requires Clarification
+                </span>
+              </div>
+              <p className="ambiguous-note">
+                The following generic terms appear in the ingredient list. They cannot confirm or exclude restricted hazards without manufacturer clarification:
+              </p>
+              <div className="ambiguous-chips-list">
+                {report.ambiguous_ingredients.map((amb, i) => (
+                  <div key={i} className="ambiguous-item-chip">
+                    <strong>"{amb.source_text}"</strong>
+                    <span className="amb-category">({amb.category})</span>
+                    <span className="amb-expl">{amb.explanation}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section 5: Extracted Ingredients */}
           <div className="card-panel ingredients-card">
             <div className="panel-header">
               <div className="header-title-group">
@@ -421,7 +628,10 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
                       key={i}
                       type="button"
                       className={`ingredient-chip status-${ing.status} ${isSelected ? 'selected' : ''}`}
-                      onClick={() => setSelectedIngredient(isSelected ? null : ing)}
+                      onClick={() => {
+                        setSelectedHighlight(null);
+                        setSelectedIngredient(isSelected ? null : ing);
+                      }}
                       title={`Click to locate: "${ing.source_text}"`}
                     >
                       <span className="chip-name">{ing.name}</span>
@@ -445,7 +655,7 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
             </div>
           </div>
 
-          {/* Section 4: Nutrition Facts Table */}
+          {/* Section 6: Nutrition Facts Table */}
           <div className="card-panel nutrition-card-panel">
             <div className="panel-header">
               <div className="header-title-group">
@@ -524,7 +734,7 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
             </div>
           </div>
 
-          {/* Section 5: Uncertainty & Completeness Insights */}
+          {/* Section 7: Uncertainty & Completeness Insights */}
           {report.uncertainty_flags.length > 0 && (
             <div className="card-panel uncertainty-card-panel">
               <div className="panel-header">

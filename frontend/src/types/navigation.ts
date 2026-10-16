@@ -1,4 +1,4 @@
-export type AppPage = 'home' | 'scan' | 'nutrition';
+export type AppPage = 'home' | 'scan' | 'nutrition' | 'login' | 'register' | 'onboarding';
 
 export interface NavItem {
   id: AppPage;

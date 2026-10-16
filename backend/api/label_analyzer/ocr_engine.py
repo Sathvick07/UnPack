@@ -18,6 +18,7 @@ from .validator import (
     validate_extraction_completeness,
 )
 from .matching import evaluate_compatibility
+from .contradiction import detect_contradictions, identify_ambiguous_ingredients
 
 def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
     """
@@ -281,16 +282,18 @@ def analyze_label_image(
     file_name: str,
     user_restrictions: Optional[List[str]] = None,
     user_targets: Optional[Dict[str, Any]] = None,
-    client_supplied_text: Optional[str] = None
+    client_supplied_text: Optional[str] = None,
+    ai_interpretation: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Main entry point for LabelLens analysis.
+    Main entry point for LabelLens analysis (Mission 3).
     Performs image quality assessment, OCR/Vision extraction, completeness validation,
-    and deterministic restriction matching.
+    contradiction detection, ambiguous ingredient identification, and deterministic restriction matching.
     Never fabricates mock data or assumes unreadable values are zero.
     """
     user_restrictions = user_restrictions or []
     user_targets = user_targets or {}
+    ai_interpretation = ai_interpretation or {}
 
     # Step 1: Image Quality Assessment
     quality = assess_image_quality(image_bytes, file_name)
@@ -311,6 +314,8 @@ def analyze_label_image(
             "allergen_statements": [],
             "nutrition_facts": {},
             "findings": findings,
+            "contradictions": [],
+            "ambiguous_ingredients": [],
             "uncertainty_flags": quality["warnings"] + ["Image is unreadable. No text could be verified."],
             "manual_confirmation_needed": True,
             "retake_prompt": "Please retake the photo with steady lighting and sharp focus on the ingredients.",
@@ -460,7 +465,22 @@ def analyze_label_image(
             "Automatic extraction could not legibly verify nutrition facts from this image. Values require manual review."
         )
 
-    # Step 4: Evaluate compatibility against user profile
+    # Step 4: Detect Contradictions & Ambiguous Ingredients (Mission 3)
+    contradictions = detect_contradictions(
+        raw_text=raw_text,
+        ingredients=ingredients,
+        allergen_statements=allergen_statements,
+        nutrition_facts=nutrition_facts,
+        ai_interpretation=ai_interpretation,
+        quality_tier=quality_tier
+    )
+    ambiguous_ingredients = identify_ambiguous_ingredients(ingredients)
+
+    # If contradictions are found, add notices to uncertainty flags
+    for c in contradictions:
+        uncertainty_flags.append(f"Contradiction Alert: {c.get('explanation')}")
+
+    # Step 5: Evaluate compatibility against user profile with evidence-grounding
     findings = evaluate_compatibility(
         ingredients=ingredients,
         allergen_statements=allergen_statements,
@@ -468,12 +488,15 @@ def analyze_label_image(
         user_restrictions=user_restrictions,
         user_targets=user_targets,
         quality_tier=quality_tier,
-        is_complete=completeness["is_complete"]
+        is_complete=completeness["is_complete"],
+        contradictions=contradictions,
+        raw_text=raw_text,
     )
 
     # Determine if manual confirmation is needed
     has_unknowns = (
         any(f.get("requires_manual_confirmation") for f in findings)
+        or bool(contradictions)
         or quality_tier != "CLEAR"
         or not completeness["is_complete"]
         or not ingredients
@@ -496,6 +519,8 @@ def analyze_label_image(
         "allergen_statements": allergen_statements,
         "nutrition_facts": nutrition_facts,
         "findings": findings,
+        "contradictions": contradictions,
+        "ambiguous_ingredients": ambiguous_ingredients,
         "uncertainty_flags": uncertainty_flags,
         "manual_confirmation_needed": has_unknowns,
         "retake_prompt": retake_prompt,

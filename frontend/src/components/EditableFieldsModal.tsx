@@ -161,8 +161,8 @@ export const EditableFieldsModal: React.FC<EditableFieldsModalProps> = ({
                 const fact = nutrition[key];
                 const unit = fact?.unit || (key === 'energy' ? 'kcal' : (key === 'sodium' ? 'mg' : 'g'));
                 return (
-                  <div key={key} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 1fr', gap: '0.75rem', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '0.5rem 0.75rem', borderRadius: '8px' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <div key={key} className="nutrition-edit-field-row">
+                    <span className="nutrient-edit-label">
                       {key.replace('_', ' ').toUpperCase()} ({unit})
                     </span>
                     <input
@@ -171,7 +171,7 @@ export const EditableFieldsModal: React.FC<EditableFieldsModalProps> = ({
                       placeholder="Per 100g (optional)"
                       value={fact?.value !== null && fact?.value !== undefined ? fact.value : ''}
                       onChange={(e) => handleNutritionChange(key, e.target.value)}
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem' }}
+                      className="input-field"
                     />
                     <input
                       type="number"
@@ -179,7 +179,7 @@ export const EditableFieldsModal: React.FC<EditableFieldsModalProps> = ({
                       placeholder="Per Serving (optional)"
                       value={fact?.serving_value !== null && fact?.serving_value !== undefined ? fact.serving_value : ''}
                       onChange={(e) => handleNutritionServingChange(key, e.target.value)}
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem' }}
+                      className="input-field"
                     />
                   </div>
                 );
