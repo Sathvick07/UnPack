@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LabelAnalysisReport, ExtractedIngredient, NutritionFact } from '../types/label';
+import { verifyFields } from '../api/client';
 import { QualityWarningBanner } from './QualityWarningBanner';
 import { ManualConfirmationCard } from './ManualConfirmationCard';
 import { EditableFieldsModal } from './EditableFieldsModal';
@@ -64,36 +65,64 @@ export const EvidenceLens: React.FC<EvidenceLensProps> = ({
     });
   };
 
-  const handleSaveEdits = (
+  const handleSaveEdits = async (
     updatedIngredients: ExtractedIngredient[],
     updatedNutrition: Record<string, NutritionFact>
   ) => {
-    // Re-check findings against restrictions with edited fields
-    const updatedFindings = report.findings.map((f) => {
-      const rest = f.restriction?.toLowerCase() || '';
-      const hasConflict = updatedIngredients.some(
-        (ing) => ing.name.toLowerCase().includes(rest) && ing.status === 'detected'
-      );
-      if (hasConflict) {
-        return {
-          ...f,
-          status: 'CONFLICT DETECTED',
-          severity: 'CRITICAL' as const,
-          explanation: `Ingredient matching '${f.restriction}' found in verified ingredients.`,
-          evidence: updatedIngredients.find((ing) => ing.name.toLowerCase().includes(rest))?.name || '',
-          requires_manual_confirmation: false,
-        };
-      }
-      return f;
-    });
+    try {
+      const activeRestrictions = report.findings
+        .map((f) => f.restriction)
+        .filter(Boolean) as string[];
 
-    onUpdateReport({
-      ...report,
-      ingredients: updatedIngredients,
-      nutrition_facts: updatedNutrition,
-      findings: updatedFindings,
-      manual_confirmation_needed: updatedFindings.some((f) => f.requires_manual_confirmation),
-    });
+      const verified = await verifyFields({
+        ingredients: updatedIngredients,
+        allergen_statements: report.allergen_statements,
+        nutrition_facts: updatedNutrition,
+        restrictions: activeRestrictions,
+        targets: {},
+        raw_text: report.raw_text,
+        quality_tier: report.quality.quality_tier,
+      });
+
+      onUpdateReport({
+        ...report,
+        ingredients: verified.ingredients,
+        allergen_statements: verified.allergen_statements,
+        nutrition_facts: verified.nutrition_facts,
+        findings: verified.findings,
+        is_complete: verified.is_complete,
+        completeness_score: verified.completeness_score,
+        uncertainty_flags: verified.uncertainty_flags,
+        manual_confirmation_needed: verified.manual_confirmation_needed,
+      });
+    } catch {
+      // Safe fallback if network/server is unavailable
+      const updatedFindings = report.findings.map((f) => {
+        const rest = f.restriction?.toLowerCase() || '';
+        const hasConflict = updatedIngredients.some(
+          (ing) => ing.name.toLowerCase().includes(rest) && ing.status === 'detected'
+        );
+        if (hasConflict) {
+          return {
+            ...f,
+            status: 'CONFLICT DETECTED',
+            severity: 'CRITICAL' as const,
+            explanation: `Ingredient matching '${f.restriction}' found in verified ingredients.`,
+            evidence: updatedIngredients.find((ing) => ing.name.toLowerCase().includes(rest))?.name || '',
+            requires_manual_confirmation: false,
+          };
+        }
+        return f;
+      });
+
+      onUpdateReport({
+        ...report,
+        ingredients: updatedIngredients,
+        nutrition_facts: updatedNutrition,
+        findings: updatedFindings,
+        manual_confirmation_needed: updatedFindings.some((f) => f.requires_manual_confirmation),
+      });
+    }
   };
 
   return (

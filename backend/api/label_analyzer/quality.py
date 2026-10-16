@@ -57,6 +57,25 @@ def assess_image_quality(image_bytes: bytes, file_name: str = "") -> Dict[str, A
                 warnings.append("Low contrast or severe blur detected across the image.")
                 recommendations.append("Ensure the lens is focused and hold the camera steady.")
 
+            # Curved packaging / cylindrical surface detection
+            # Cylindrical cans, bottles, or jars produce a pronounced parabolic illumination profile:
+            # the central vertical strip is bright while left and right columns drop off sharply.
+            is_curved = False
+            if width >= 200 and height >= 100:
+                slice_w = width // 5
+                left_stat = ImageStat.Stat(grayscale.crop((0, 0, slice_w, height)))
+                center_stat = ImageStat.Stat(grayscale.crop((2 * slice_w, 0, 3 * slice_w, height)))
+                right_stat = ImageStat.Stat(grayscale.crop((4 * slice_w, 0, width, height)))
+                
+                left_mean = left_stat.mean[0]
+                center_mean = center_stat.mean[0]
+                right_mean = right_stat.mean[0]
+
+                if center_mean > left_mean + 28 and center_mean > right_mean + 28 and contrast_stddev > 15:
+                    is_curved = True
+                    warnings.append("Curved cylindrical packaging surface detected. Text along the edges may be distorted or wrapped out of view.")
+                    recommendations.append("Rotate cylindrical bottles or cans to capture each label panel flat-on, or take multiple overlapping photos.")
+
             # Determine overall quality tier
             if len(warnings) == 0:
                 quality_tier = "CLEAR"
@@ -80,6 +99,7 @@ def assess_image_quality(image_bytes: bytes, file_name: str = "") -> Dict[str, A
                 "format": img_format,
                 "aspect_ratio": aspect_ratio,
                 "contrast_score": round(contrast_stddev, 1),
+                "is_curved_surface": is_curved,
                 "quality_tier": quality_tier,
                 "quality_score": quality_score,
                 "warnings": warnings,
@@ -96,6 +116,7 @@ def assess_image_quality(image_bytes: bytes, file_name: str = "") -> Dict[str, A
             "format": "INVALID",
             "aspect_ratio": 0.0,
             "contrast_score": 0.0,
+            "is_curved_surface": False,
             "quality_tier": "UNREADABLE",
             "quality_score": 0,
             "warnings": [f"Could not decode image file: {str(exc)}"],

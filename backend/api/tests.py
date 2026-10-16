@@ -207,3 +207,116 @@ class VerifyFieldsEndpointTests(APITestCase):
 
         sodium_finding = [f for f in findings if f.get("target") == "sodium_max"][0]
         self.assertEqual(sodium_finding["status"], "PREFERENCE MISMATCH")
+
+
+class Mission2EdgeCaseTests(APITestCase):
+    """
+    Dedicated tests for Mission 2: LabelLens — Handling Unclear Labels and Uncertain Information.
+    Covers curved/cylindrical packaging, obscured text, missing allergen notices, and truncation.
+    """
+
+    def setUp(self):
+        self.analyze_url = reverse('analyze-label')
+
+    def test_curved_cylindrical_label_detected(self):
+        # Create cylindrical lighting gradient
+        width, height = 500, 300
+        img = Image.new("L", (width, height), color=40)
+        for x in range(width):
+            dist = abs(x - width / 2.0) / (width / 2.0)
+            lum = int(210 - (dist ** 2) * 160)
+            for y in range(height):
+                img.putpixel((x, y), max(10, min(250, lum)))
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        img_bytes = buf.getvalue()
+
+        quality = assess_image_quality(img_bytes, "curved_can.jpg")
+        self.assertTrue(quality["is_valid"])
+        self.assertTrue(quality.get("is_curved_surface"))
+        self.assertTrue(any("curved" in w.lower() for w in quality["warnings"]))
+
+    def test_obscured_ingredient_marked_uncertain_and_requires_confirmation(self):
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("label.jpg", img_bytes, content_type="image/jpeg")
+
+        label_with_unreadable = (
+            "INGREDIENTS: Rolled oats, [unreadable], cane sugar, sea salt.\n"
+            "CONTAINS: Tree nuts.\n"
+            "NUTRITION FACTS (per 100g):\n"
+            "Energy: 400 kcal\n"
+            "Protein: 10 g"
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "restrictions": json.dumps(["peanut"]),
+                "raw_text": label_with_unreadable,
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertFalse(data["is_complete"])
+        self.assertTrue(any("unreadable" in f.lower() or "obscured" in f.lower() for f in data["uncertainty_flags"]))
+
+        # For peanut (which was not explicitly seen), because an ingredient is obscured,
+        # it MUST NOT claim "NO CONFLICT IDENTIFIED"! It must report UNKNOWN / VERIFY
+        peanut_finding = [f for f in data["findings"] if f.get("restriction") == "peanut"][0]
+        self.assertEqual(peanut_finding["status"], "UNKNOWN / VERIFY")
+        self.assertTrue(peanut_finding["requires_manual_confirmation"])
+
+    def test_missing_allergen_declaration_flagged(self):
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("label.jpg", img_bytes, content_type="image/jpeg")
+
+        label_without_allergen_stmt = (
+            "INGREDIENTS: Rolled oats, cane sugar, sunflower oil, sea salt.\n"
+            "NUTRITION FACTS (per 100g):\n"
+            "Energy: 420 kcal\n"
+            "Fat: 12 g\n"
+            "Carbohydrates: 65 g\n"
+            "Protein: 8 g"
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "restrictions": json.dumps(["peanut"]),
+                "raw_text": label_without_allergen_stmt,
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertTrue(any("no explicit allergen statement" in f.lower() for f in data["uncertainty_flags"]))
+
+    def test_incomplete_truncated_ocr_detected(self):
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("label.jpg", img_bytes, content_type="image/jpeg")
+
+        truncated_label = (
+            "INGREDIENTS: Whole wheat flour, water, yeast, salt, vegetable oil, ...\n"
+            "CONTAINS: Wheat."
+        )
+
+        response = self.client.post(
+            self.analyze_url,
+            {
+                "image": image_file,
+                "restrictions": json.dumps(["peanut"]),
+                "raw_text": truncated_label,
+            },
+            format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertFalse(data["is_complete"])
+        self.assertTrue(any("truncated" in f.lower() or "cut off" in f.lower() for f in data["uncertainty_flags"]))

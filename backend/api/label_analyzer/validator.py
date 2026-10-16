@@ -4,6 +4,7 @@ Validates extracted structured data, normalizes nutrients, preserves exact sourc
 and strictly enforces that missing data is marked unknown/not-provided rather than zero.
 """
 
+import re
 from typing import Dict, Any, List, Optional
 
 VALID_STATUSES = {
@@ -93,7 +94,7 @@ def validate_extraction_completeness(
     raw_clean = raw_text.strip().lower()
 
     # Check for trailing ellipsis or unfinished ingredients
-    if raw_clean.endswith("...") or raw_clean.endswith(",") or raw_clean.endswith("and"):
+    if raw_clean.endswith("...") or raw_clean.endswith(",") or raw_clean.endswith("and") or "..." in raw_clean:
         flags.append("Ingredient list appears cut off or truncated at the image margin.")
         is_incomplete = True
 
@@ -102,7 +103,17 @@ def validate_extraction_completeness(
         flags.append("One or more words could not be legibly resolved due to glare, fold, or blur.")
         is_incomplete = True
 
-    if quality_tier in ("LOW", "UNREADABLE"):
+    # Check for missing allergen statement
+    has_allergen_stmt = bool(re.search(r"(?:contains|allergens?|may contain):", raw_clean))
+    if not has_allergen_stmt and len(ingredients) > 0:
+        flags.append("No explicit allergen statement ('Contains' or 'May Contain') was identified on this label panel.")
+
+    # Check if any ingredient is marked unreadable or uncertain
+    if any(ing.get("status") in ("uncertain", "unreadable", "ambiguous") for ing in ingredients):
+        flags.append("One or more ingredient entries contain obscured or uncertain text.")
+        is_incomplete = True
+
+    if quality_tier in ("LOW", "UNREADABLE", "UNCERTAIN"):
         flags.append("Image quality is below threshold; unlisted ingredients cannot be assumed absent.")
         is_incomplete = True
 

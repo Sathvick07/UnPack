@@ -28,6 +28,15 @@ export const QualityWarningBanner: React.FC<QualityWarningBannerProps> = ({
           >
             {quality.quality_tier}
           </span>
+          {quality.is_curved_surface && (
+            <span
+              className="quality-badge"
+              style={{ backgroundColor: '#8b5cf6' }}
+              title="Cylindrical surface illumination gradient detected"
+            >
+              Curved Packaging
+            </span>
+          )}
           <span className="quality-score-text">
             Clarity Score: <strong>{quality.quality_score}/100</strong>
           </span>

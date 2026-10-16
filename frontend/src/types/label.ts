@@ -11,6 +11,7 @@ export interface ImageQualityInfo {
   format: string;
   aspect_ratio: number;
   contrast_score: number;
+  is_curved_surface?: boolean;
   quality_tier: QualityTier;
   quality_score: number;
   warnings: string[];
