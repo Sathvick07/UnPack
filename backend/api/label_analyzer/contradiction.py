@@ -105,11 +105,12 @@ def detect_contradictions(
     # Normalize allergen statements
     stmt_texts = []
     for stmt in allergen_statements:
-        src = stmt.get("source_text", "")
+        src = str(stmt.get("source_text") or stmt.get("statement") or stmt.get("text") or "").strip()
+        n_type = str(stmt.get("notice_type") or stmt.get("type") or "contains").lower()
         stmt_texts.append({
             "source_text": src,
             "text_lower": src.lower(),
-            "notice_type": stmt.get("notice_type", "contains"),
+            "notice_type": n_type,
             "bounding_box": stmt.get("bounding_box"),
         })
 

@@ -1,0 +1,439 @@
+{
+  "file_name": "WhatsApp Image 2026-10-16 at 7.46.26 PM.jpeg",
+  "quality": {
+    "is_valid": true,
+    "file_name": "WhatsApp Image 2026-10-16 at 7.46.26 PM.jpeg",
+    "file_size_kb": 694.4,
+    "width": 900,
+    "height": 1600,
+    "format": "JPEG",
+    "aspect_ratio": 1.78,
+    "contrast_score": 78.4,
+    "blur_metric": 1602.2,
+    "is_curved_surface": true,
+    "quality_tier": "MODERATE",
+    "quality_score": 75,
+    "warnings": [
+      "Curved cylindrical packaging surface detected. Text along the edges may be distorted or wrapped out of view."
+    ],
+    "retake_recommendations": [
+      "Rotate cylindrical bottles or cans to capture each label panel flat-on, or take multiple overlapping photos."
+    ]
+  },
+  "readability_status": "MODERATE",
+  "is_complete": true,
+  "completeness_score": 100,
+  "raw_text": "GLUTEN-FREE HEALTH CRACKERS\n100% Gluten-Free. No Wheat Guaranteed. Zero Sugar.\n\nINGREDIENTS: Rice Flour, Maida (Refined Wheat Flour), Sugar, Spices and Condiments, Natural Flavors, Emulsifiers.\nCONTAINS: Wheat.\n\nNUTRITION INFORMATION (Per 100g):\nEnergy (kcal) 420\nProtein (g) 7.5\nCarbohydrates (g) 68.0\nTotal Sugars (g) 14.5\nTotal Fat (g) 12.0\nSodium (mg) 480\n",
+  "ingredients": [
+    {
+      "name": "Rice Flour",
+      "source_text": "Rice Flour",
+      "status": "detected",
+      "confidence": 0.95,
+      "bounding_box": [
+        0.25,
+        0.12,
+        0.28,
+        0.88
+      ],
+      "notes": ""
+    },
+    {
+      "name": "Maida (Refined Wheat Flour)",
+      "source_text": "Maida (Refined Wheat Flour)",
+      "status": "detected",
+      "confidence": 0.95,
+      "bounding_box": [
+        0.29,
+        0.12,
+        0.32,
+        0.88
+      ],
+      "notes": ""
+    },
+    {
+      "name": "Sugar",
+      "source_text": "Sugar",
+      "status": "detected",
+      "confidence": 0.95,
+      "bounding_box": [
+        0.33,
+        0.12,
+        0.36,
+        0.88
+      ],
+      "notes": ""
+    },
+    {
+      "name": "Spices and Condiments",
+      "source_text": "Spices and Condiments",
+      "status": "detected",
+      "confidence": 0.95,
+      "bounding_box": [
+        0.37,
+        0.12,
+        0.4,
+        0.88
+      ],
+      "notes": ""
+    },
+    {
+      "name": "Natural Flavors",
+      "source_text": "Natural Flavors",
+      "status": "detected",
+      "confidence": 0.95,
+      "bounding_box": [
+        0.41,
+        0.12,
+        0.44,
+        0.88
+      ],
+      "notes": ""
+    },
+    {
+      "name": "Emulsifiers",
+      "source_text": "Emulsifiers",
+      "status": "detected",
+      "confidence": 0.95,
+      "bounding_box": [
+        0.45,
+        0.12,
+        0.48,
+        0.88
+      ],
+      "notes": ""
+    }
+  ],
+  "allergen_statements": [
+    {
+      "notice_type": "contains",
+      "type": "contains",
+      "source_text": "CONTAINS: Wheat",
+      "statement": "CONTAINS: Wheat",
+      "bounding_box": [
+        0.72,
+        0.1,
+        0.78,
+        0.85
+      ]
+    }
+  ],
+  "nutrition_facts": {
+    "energy": {
+      "nutrient": "energy",
+      "value": 420.0,
+      "unit": "Protein",
+      "basis": "per_100g",
+      "serving_value": 7.5,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Energy (kcal) 420\nProtein (g) 7.5",
+      "is_zero_explicit": false
+    },
+    "fat": {
+      "nutrient": "fat",
+      "value": 12.0,
+      "unit": "Sodium",
+      "basis": "per_100g",
+      "serving_value": 480.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Total Fat (g) 12.0\nSodium (mg) 480",
+      "is_zero_explicit": false
+    },
+    "saturated_fat": {
+      "nutrient": "saturated_fat",
+      "value": null,
+      "unit": "g",
+      "basis": "unknown",
+      "serving_value": null,
+      "serving_basis": "",
+      "status": "not_provided",
+      "source_text": "",
+      "is_zero_explicit": false
+    },
+    "trans_fat": {
+      "nutrient": "trans_fat",
+      "value": null,
+      "unit": "g",
+      "basis": "unknown",
+      "serving_value": null,
+      "serving_basis": "",
+      "status": "not_provided",
+      "source_text": "",
+      "is_zero_explicit": false
+    },
+    "carbohydrates": {
+      "nutrient": "carbohydrates",
+      "value": 68.0,
+      "unit": "Total",
+      "basis": "per_100g",
+      "serving_value": 14.5,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Carbohydrates (g) 68.0\nTotal Sugars (g) 14.5",
+      "is_zero_explicit": false
+    },
+    "sugars": {
+      "nutrient": "sugars",
+      "value": 14.5,
+      "unit": "Total",
+      "basis": "per_100g",
+      "serving_value": 12.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Total Sugars (g) 14.5\nTotal Fat (g) 12.0",
+      "is_zero_explicit": false
+    },
+    "added_sugars": {
+      "nutrient": "added_sugars",
+      "value": null,
+      "unit": "g",
+      "basis": "unknown",
+      "serving_value": null,
+      "serving_basis": "",
+      "status": "not_provided",
+      "source_text": "",
+      "is_zero_explicit": false
+    },
+    "protein": {
+      "nutrient": "protein",
+      "value": 7.5,
+      "unit": "Carbohydrates",
+      "basis": "per_100g",
+      "serving_value": 68.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Protein (g) 7.5\nCarbohydrates (g) 68.0",
+      "is_zero_explicit": false
+    },
+    "sodium": {
+      "nutrient": "sodium",
+      "value": 480.0,
+      "unit": "mg",
+      "basis": "per_100g",
+      "serving_value": null,
+      "serving_basis": "",
+      "status": "detected",
+      "source_text": "Sodium (mg) 480",
+      "is_zero_explicit": false
+    }
+  },
+  "findings": [
+    {
+      "id": "gluten",
+      "restriction": "gluten",
+      "display_name": "Gluten",
+      "status": "Unresolved contradiction",
+      "result_status": "Unresolved contradiction",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Contradiction detected: AI interpretation or packaging claim ('gluten-free') disagrees with explicit label evidence ('Maida (Refined Wheat Flour)'). AI claim cannot be silently trusted.",
+      "evidence": "Claim: \"gluten-free\" vs Label Evidence: \"Maida (Refined Wheat Flour)\"",
+      "supporting_text": "Maida (Refined Wheat Flour)",
+      "evidence_snippet": "Maida (Refined Wheat Flour)",
+      "bounding_box": [
+        0.29,
+        0.12,
+        0.32,
+        0.88
+      ],
+      "action_recommendation": "Do not consume. Available evidence contains an unresolved contradiction for Gluten. Verify physical packaging or contact manufacturer.",
+      "source_type": "CONTRADICTION",
+      "requires_manual_confirmation": true,
+      "is_contradiction": true,
+      "contradiction_details": {
+        "id": "contradiction_gluten_free_wheat",
+        "claim_type": "gluten_free",
+        "claim_label": "Gluten-Free",
+        "claim_text": "gluten-free",
+        "contradiction_type": "CLAIM_VS_INGREDIENT",
+        "status": "Unresolved contradiction",
+        "severity": "CRITICAL",
+        "supporting_text": "Maida (Refined Wheat Flour)",
+        "bounding_box": [
+          0.29,
+          0.12,
+          0.32,
+          0.88
+        ],
+        "explanation": "Disagreement detected: Marketing or AI claim asserts 'Gluten-Free', but explicit ingredient list contains 'Maida (Refined Wheat Flour)'.",
+        "recommendation": "Do not trust the marketing/AI claim. Physical ingredient declaration confirms presence."
+      }
+    },
+    {
+      "id": "wheat",
+      "restriction": "wheat",
+      "display_name": "Wheat",
+      "status": "Unresolved contradiction",
+      "result_status": "Unresolved contradiction",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Contradiction detected: AI interpretation or packaging claim ('gluten-free') disagrees with explicit label evidence ('Maida (Refined Wheat Flour)'). AI claim cannot be silently trusted.",
+      "evidence": "Claim: \"gluten-free\" vs Label Evidence: \"Maida (Refined Wheat Flour)\"",
+      "supporting_text": "Maida (Refined Wheat Flour)",
+      "evidence_snippet": "Maida (Refined Wheat Flour)",
+      "bounding_box": [
+        0.29,
+        0.12,
+        0.32,
+        0.88
+      ],
+      "action_recommendation": "Do not consume. Available evidence contains an unresolved contradiction for Wheat. Verify physical packaging or contact manufacturer.",
+      "source_type": "CONTRADICTION",
+      "requires_manual_confirmation": true,
+      "is_contradiction": true,
+      "contradiction_details": {
+        "id": "contradiction_gluten_free_wheat",
+        "claim_type": "gluten_free",
+        "claim_label": "Gluten-Free",
+        "claim_text": "gluten-free",
+        "contradiction_type": "CLAIM_VS_INGREDIENT",
+        "status": "Unresolved contradiction",
+        "severity": "CRITICAL",
+        "supporting_text": "Maida (Refined Wheat Flour)",
+        "bounding_box": [
+          0.29,
+          0.12,
+          0.32,
+          0.88
+        ],
+        "explanation": "Disagreement detected: Marketing or AI claim asserts 'Gluten-Free', but explicit ingredient list contains 'Maida (Refined Wheat Flour)'.",
+        "recommendation": "Do not trust the marketing/AI claim. Physical ingredient declaration confirms presence."
+      }
+    }
+  ],
+  "contradictions": [
+    {
+      "id": "contradiction_gluten_free_wheat",
+      "claim_type": "gluten_free",
+      "claim_label": "Gluten-Free",
+      "claim_text": "gluten-free",
+      "contradiction_type": "CLAIM_VS_INGREDIENT",
+      "status": "Unresolved contradiction",
+      "severity": "CRITICAL",
+      "supporting_text": "Maida (Refined Wheat Flour)",
+      "bounding_box": [
+        0.29,
+        0.12,
+        0.32,
+        0.88
+      ],
+      "explanation": "Disagreement detected: Marketing or AI claim asserts 'Gluten-Free', but explicit ingredient list contains 'Maida (Refined Wheat Flour)'.",
+      "recommendation": "Do not trust the marketing/AI claim. Physical ingredient declaration confirms presence."
+    },
+    {
+      "id": "contradiction_allergen_gluten_free_gluten",
+      "claim_type": "gluten_free",
+      "claim_label": "Gluten-Free",
+      "claim_text": "gluten-free",
+      "contradiction_type": "CLAIM_VS_ALLERGEN_STATEMENT",
+      "status": "Unresolved contradiction",
+      "severity": "CRITICAL",
+      "supporting_text": "CONTAINS: Wheat",
+      "bounding_box": [
+        0.72,
+        0.1,
+        0.78,
+        0.85
+      ],
+      "explanation": "Disagreement detected: Claim asserts 'Gluten-Free', but packaging allergen declaration explicitly warns: 'CONTAINS: Wheat'.",
+      "recommendation": "Avoid consuming. Explicit allergen panel overrides front-of-pack claims."
+    },
+    {
+      "id": "contradiction_sugar_free_sugar",
+      "claim_type": "sugar_free",
+      "claim_label": "Sugar-Free / Zero Sugar",
+      "claim_text": "zero sugar",
+      "contradiction_type": "CLAIM_VS_INGREDIENT",
+      "status": "Unresolved contradiction",
+      "severity": "CRITICAL",
+      "supporting_text": "Sugar",
+      "bounding_box": [
+        0.33,
+        0.12,
+        0.36,
+        0.88
+      ],
+      "explanation": "Disagreement detected: Marketing or AI claim asserts 'Sugar-Free / Zero Sugar', but explicit ingredient list contains 'Sugar'.",
+      "recommendation": "Do not trust the marketing/AI claim. Physical ingredient declaration confirms presence."
+    },
+    {
+      "id": "contradiction_nutrient_sugar_free_sugars",
+      "claim_type": "sugar_free",
+      "claim_label": "Sugar-Free / Zero Sugar",
+      "claim_text": "zero sugar",
+      "contradiction_type": "CLAIM_VS_NUTRITION_TABLE",
+      "status": "Unresolved contradiction",
+      "severity": "WARNING",
+      "supporting_text": "Total Sugars (g) 14.5\nTotal Fat (g) 12.0",
+      "bounding_box": null,
+      "explanation": "Disagreement detected: Label or AI claims 'Sugar-Free / Zero Sugar', but verified nutrition table states Sugars is 14.5 Total (exceeds 0.5 Total threshold).",
+      "recommendation": "Follow the printed nutrition facts table rather than promotional front-of-pack wording."
+    },
+    {
+      "id": "ai_hallucinated_nutrient_trans_fat",
+      "claim_type": "ai_hallucinated_value",
+      "claim_label": "AI Fabricated Trans_fat",
+      "claim_text": "AI reported trans_fat: {'value': 0.0, 'status': 'detected', 'note': 'Assumed 0 because omitted'}",
+      "contradiction_type": "AI_FABRICATION_VS_EVIDENCE",
+      "status": "Unresolved contradiction",
+      "severity": "WARNING",
+      "supporting_text": "Field absent from packaging label",
+      "bounding_box": null,
+      "explanation": "AI interpretation reported trans_fat as {'value': 0.0, 'status': 'detected', 'note': 'Assumed 0 because omitted'}, but this nutrient is completely absent from the readable packaging table. Model fabrication rejected.",
+      "recommendation": "Field left unverified (not provided) rather than adopting AI estimate."
+    }
+  ],
+  "ambiguous_ingredients": [
+    {
+      "ingredient_name": "Spices and Condiments",
+      "source_text": "Spices and Condiments",
+      "category": "Spices / Seasonings",
+      "explanation": "May conceal mustard, celery, or sesame without declaration",
+      "bounding_box": [
+        0.37,
+        0.12,
+        0.4,
+        0.88
+      ],
+      "status": "Uncertain interpretation"
+    },
+    {
+      "ingredient_name": "Natural Flavors",
+      "source_text": "Natural Flavors",
+      "category": "Flavorings / Natural Flavors",
+      "explanation": "May derive from animal, gluten, or nut sources",
+      "bounding_box": [
+        0.41,
+        0.12,
+        0.44,
+        0.88
+      ],
+      "status": "Uncertain interpretation"
+    },
+    {
+      "ingredient_name": "Emulsifiers",
+      "source_text": "Emulsifiers",
+      "category": "Emulsifiers / Thickeners",
+      "explanation": "Source botanical or animal origin not specified",
+      "bounding_box": [
+        0.45,
+        0.12,
+        0.48,
+        0.88
+      ],
+      "status": "Uncertain interpretation"
+    }
+  ],
+  "uncertainty_flags": [
+    "Curved cylindrical packaging surface detected. Text along the edges may be distorted or wrapped out of view.",
+    "Contradiction Alert: Disagreement detected: Marketing or AI claim asserts 'Gluten-Free', but explicit ingredient list contains 'Maida (Refined Wheat Flour)'.",
+    "Contradiction Alert: Disagreement detected: Claim asserts 'Gluten-Free', but packaging allergen declaration explicitly warns: 'CONTAINS: Wheat'.",
+    "Contradiction Alert: Disagreement detected: Marketing or AI claim asserts 'Sugar-Free / Zero Sugar', but explicit ingredient list contains 'Sugar'.",
+    "Contradiction Alert: Disagreement detected: Label or AI claims 'Sugar-Free / Zero Sugar', but verified nutrition table states Sugars is 14.5 Total (exceeds 0.5 Total threshold).",
+    "Contradiction Alert: AI interpretation reported trans_fat as {'value': 0.0, 'status': 'detected', 'note': 'Assumed 0 because omitted'}, but this nutrient is completely absent from the readable packaging table. Model fabrication rejected."
+  ],
+  "manual_confirmation_needed": true,
+  "retake_prompt": "Rotate cylindrical bottles or cans to capture each label panel flat-on, or take multiple overlapping photos."
+}

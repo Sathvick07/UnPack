@@ -4,6 +4,7 @@ import json
 from PIL import Image, ImageDraw, ImageFilter
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
@@ -595,6 +596,82 @@ class Mission2EdgeCaseTests(APITestCase):
         self.assertEqual(gluten_finding["severity"], "CRITICAL")
         self.assertIn("CONTAINS MILK, WHEAT AND SOY", gluten_finding["evidence"])
 
+    def test_explicit_milk_declaration_from_structured_and_unstructured_evidence(self):
+        """
+        Mission 04 Regression Test: When packaging explicitly declares 'CONTAINS MILK, WHEAT AND SOY.',
+        Dairy / Milk MUST be classified as 'Confirmed conflict' (CRITICAL) rather than uncertain.
+        Wheat and Gluten must be 'Confirmed conflict' (CRITICAL), while Peanut remains 'Uncertain interpretation'
+        when only ambiguous ingredients are present. Also verifies no false missing-allergen warning.
+        """
+        img_bytes = create_dummy_image()
+        image_file = SimpleUploadedFile("chips_milk_label.jpg", img_bytes, content_type="image/jpeg")
+
+        chips_text = (
+            "INGREDIENTS: Potato (87.4%), edible vegetable oil, spices and condiments, maida (refined wheat flour), salt.\n"
+            "CONTAINS MILK, WHEAT AND SOY. MAY CONTAIN BARLEY.\n"
+            "NUTRITIONAL INFORMATION: Energy 524 kcal, Protein 7.1g."
+        )
+
+        from unittest.mock import patch
+        mock_gemini_payload = {
+            "raw_text": chips_text,
+            "ingredients": [
+                {"name": "Potato (87.4%)", "source_text": "Potato (87.4%)", "status": "detected"},
+                {"name": "spices and condiments", "source_text": "spices and condiments", "status": "detected"},
+                {"name": "maida (refined wheat flour)", "source_text": "maida (refined wheat flour)", "status": "detected"},
+            ],
+            "allergen_statements": [
+                {"type": "contains", "statement": "CONTAINS MILK, WHEAT AND SOY."},
+                {"type": "may_contain", "statement": "MAY CONTAIN BARLEY."}
+            ],
+            "nutrition_facts": {
+                "energy": {"value": 524.0, "unit": "kcal", "basis": "per_100g", "status": "detected"}
+            }
+        }
+
+        with patch("api.label_analyzer.ocr_engine.call_gemini_vision", return_value=(mock_gemini_payload, None)):
+            response = self.client.post(
+                self.analyze_url,
+                {
+                    "image": image_file,
+                    "restrictions": json.dumps(["gluten", "wheat", "peanut", "milk"]),
+                },
+                format="multipart"
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+
+        # 1. Milk must be Confirmed conflict (NOT Uncertain interpretation)
+        milk_finding = next((f for f in data["findings"] if f.get("id") == "milk"), None)
+        self.assertIsNotNone(milk_finding)
+        self.assertIn(milk_finding["status"], ["Confirmed conflict", "CONFLICT DETECTED"])
+        self.assertEqual(milk_finding["severity"], "CRITICAL")
+        self.assertIn("CONTAINS MILK, WHEAT AND SOY.", milk_finding["evidence"])
+        self.assertFalse(milk_finding["requires_manual_confirmation"])
+
+        # 2. Wheat must be Confirmed conflict
+        wheat_finding = next((f for f in data["findings"] if f.get("id") == "wheat"), None)
+        self.assertIsNotNone(wheat_finding)
+        self.assertIn(wheat_finding["status"], ["Confirmed conflict", "CONFLICT DETECTED"])
+        self.assertEqual(wheat_finding["severity"], "CRITICAL")
+
+        # 3. Gluten must be Confirmed conflict
+        gluten_finding = next((f for f in data["findings"] if f.get("id") == "gluten"), None)
+        self.assertIsNotNone(gluten_finding)
+        self.assertIn(gluten_finding["status"], ["Confirmed conflict", "CONFLICT DETECTED"])
+        self.assertEqual(gluten_finding["severity"], "CRITICAL")
+
+        # 4. Peanut must remain Uncertain interpretation (attention)
+        peanut_finding = next((f for f in data["findings"] if f.get("id") == "peanut"), None)
+        self.assertIsNotNone(peanut_finding)
+        self.assertIn(peanut_finding["status"], ["Uncertain interpretation", "UNKNOWN / VERIFY"])
+        self.assertEqual(peanut_finding["severity"], "ATTENTION")
+        self.assertTrue(peanut_finding["requires_manual_confirmation"])
+
+        # 5. Must NOT have false missing-allergen uncertainty flag
+        self.assertFalse(any("No explicit allergen statement" in f for f in data.get("uncertainty_flags", [])))
+
     def test_no_conflict_identified_negative_language(self):
         """
         Regression test: When no allergy conflict exists, verify safe language:
@@ -1137,6 +1214,396 @@ class Mission3EvidenceAndContradictionTests(APITestCase):
         # Invariant: the actual nutrition table must remain not_provided, NOT adopting hallucination
         self.assertIsNone(data["nutrition_facts"]["sugars"]["value"])
         self.assertEqual(data["nutrition_facts"]["sugars"]["status"], "not_provided")
+
+
+class NutrientReferenceLimitsTests(TestCase):
+    """
+    Feature A: Comprehensive tests for predefined daily nutrient reference limits (FSSAI 2020 / ICMR 2020).
+    """
+
+    def test_configured_reference_values_produce_correct_percentages(self):
+        from .nutrition.reference_limits import get_reference_limit
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        # Sodium: 2000 mg reference
+        ref = get_reference_limit("sodium")
+        self.assertIsNotNone(ref)
+        self.assertEqual(ref.daily_reference_amount, 2000.0)
+        self.assertEqual(ref.unit, "mg")
+
+        # 500 mg should be 25.0%
+        result = calculate_nutrient_percentage("sodium", 500.0, "mg")
+        self.assertEqual(result["status"], "calculated")
+        self.assertEqual(result["percentage"], 25.0)
+
+        # 1400 mg should be 70.0%
+        result = calculate_nutrient_percentage("sodium", 1400.0, "mg")
+        self.assertEqual(result["percentage"], 70.0)
+
+        # Energy: 2000 kcal reference
+        energy_result = calculate_nutrient_percentage("energy", 400.0, "kcal")
+        self.assertEqual(energy_result["percentage"], 20.0)
+
+        # Saturated fat: 22 g reference -> 11 g is 50.0%
+        sat_result = calculate_nutrient_percentage("saturated_fat", 11.0, "g")
+        self.assertEqual(sat_result["percentage"], 50.0)
+
+    def test_missing_references_do_not_crash_calculations(self):
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        # Nutrient that is not in the predefined list
+        result = calculate_nutrient_percentage("unknown_exotic_flavonoid", 12.5, "mg")
+        self.assertEqual(result["status"], "unconfigured")
+        self.assertIsNone(result["percentage"])
+        self.assertEqual(result["message"], "Daily reference not configured.")
+
+    def test_nutrients_without_applicable_percentage_show_no_percentage(self):
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        # Trans fat: tracked, but supports_percentage is False (no daily recommended target, only upper bound)
+        trans_result = calculate_nutrient_percentage("trans_fat", 0.5, "g")
+        self.assertEqual(trans_result["status"], "no_percentage_standard")
+        self.assertIsNone(trans_result["percentage"])
+        self.assertIn("No daily recommended target", trans_result["reference"]["applicability_notes"])
+
+        # Total sugars: tracked without mandatory % RDA under FSSAI (added sugars has % RDA)
+        sugars_result = calculate_nutrient_percentage("sugars", 15.0, "g")
+        self.assertEqual(sugars_result["status"], "no_percentage_standard")
+        self.assertIsNone(sugars_result["percentage"])
+
+    def test_missing_amounts_are_not_treated_as_zero(self):
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        result = calculate_nutrient_percentage("sodium", None, "mg")
+        self.assertEqual(result["status"], "amount_unavailable")
+        self.assertIsNone(result["percentage"])
+        self.assertEqual(result["message"], "Amount unavailable.")
+
+    def test_zero_amounts_remain_valid_when_explicitly_extracted(self):
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        result = calculate_nutrient_percentage("sodium", 0.0, "mg")
+        self.assertEqual(result["status"], "calculated")
+        self.assertEqual(result["percentage"], 0.0)
+
+    def test_incompatible_units_handled_safely(self):
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        # Supplying kcal for sodium (which expects mg)
+        result = calculate_nutrient_percentage("sodium", 500.0, "kcal")
+        self.assertEqual(result["status"], "incompatible_units")
+        self.assertIsNone(result["percentage"])
+        self.assertIn("incompatible", result["message"])
+
+    def test_compatible_unit_conversions(self):
+        from .nutrition.calculator import calculate_nutrient_percentage
+
+        # Sodium: 2.0 grams should safely convert to 2000.0 mg = 100.0%
+        result = calculate_nutrient_percentage("sodium", 2.0, "g")
+        self.assertEqual(result["status"], "calculated")
+        self.assertEqual(result["percentage"], 100.0)
+
+    def test_reference_values_and_alert_thresholds_remain_separate(self):
+        from .nutrition.reference_limits import get_reference_limit
+
+        sodium_ref = get_reference_limit("sodium")
+        self.assertEqual(sodium_ref.daily_reference_amount, 2000.0)
+        self.assertEqual(sodium_ref.alert_threshold_pct, 100.0)
+
+        # Trans fat has upper limit reference 2.2g but alert_threshold_pct is None
+        trans_ref = get_reference_limit("trans_fat")
+        self.assertEqual(trans_ref.daily_reference_amount, 2.2)
+        self.assertIsNone(trans_ref.alert_threshold_pct)
+
+
+class ConsumptionIntakeLedgerTests(APITestCase):
+    """
+    Features B & C: Confirmed intake ledger, multi-product alerts, persistence, and security.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="tester@example.com",
+            email="tester@example.com",
+            password="StrongPassword123!"
+        )
+        self.token = Token.objects.create(user=self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        self.other_user = User.objects.create_user(
+            username="other@example.com",
+            email="other@example.com",
+            password="StrongPassword123!"
+        )
+        self.other_token = Token.objects.create(user=self.other_user)
+
+        self.records_url = reverse("intake-records")
+        self.summary_url = reverse("intake-summary")
+
+    def test_scanning_without_confirmation_creates_no_consumption_record(self):
+        from .models import ConsumptionRecord
+        # Verify initial database state is strictly 0
+        self.assertEqual(ConsumptionRecord.objects.count(), 0)
+
+        # Even with an analyze request, consumption records must remain 0
+        self.assertEqual(ConsumptionRecord.objects.filter(user=self.user).count(), 0)
+
+    def test_unauthenticated_requests_are_rejected(self):
+        unauth_client = APIClient()
+        response = unauth_client.get(self.records_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        response = unauth_client.post(self.records_url, {"product_name": "Snack", "servings_consumed": 1.0})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_confirming_consumption_creates_one_record(self):
+        from .models import ConsumptionRecord
+
+        payload = {
+            "product_name": "Greek Yogurt 150g",
+            "servings_consumed": 1.0,
+            "basis_used": "per_serving",
+            "serving_size": "150g",
+            "serving_unit": "pot",
+            "nutrition_facts": {
+                "energy": {"value": 120.0, "serving_value": 120.0, "unit": "kcal", "status": "detected"},
+                "protein": {"value": 15.0, "serving_value": 15.0, "unit": "g", "status": "detected"},
+                "sodium": {"value": 60.0, "serving_value": 60.0, "unit": "mg", "status": "detected"},
+            }
+        }
+        response = self.client.post(self.records_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ConsumptionRecord.objects.filter(user=self.user).count(), 1)
+
+        rec = ConsumptionRecord.objects.first()
+        self.assertEqual(rec.product_name, "Greek Yogurt 150g")
+        self.assertEqual(rec.servings_consumed, 1.0)
+        self.assertEqual(rec.nutrients_snapshot["protein"]["amount"], 15.0)
+
+    def test_partial_and_multiple_servings_calculated_correctly(self):
+        # 1.5 servings of 300 mg sodium = 450 mg
+        payload = {
+            "product_name": "Tortilla Chips",
+            "servings_consumed": 1.5,
+            "basis_used": "per_serving",
+            "nutrition_facts": {
+                "sodium": {"value": 300.0, "serving_value": 300.0, "unit": "mg", "status": "detected"},
+            }
+        }
+        response = self.client.post(self.records_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.json()
+        self.assertEqual(data["record"]["nutrients_snapshot"]["sodium"]["amount"], 450.0)
+
+    def test_several_products_accumulate_correctly_and_trigger_alerts(self):
+        # Product A: 450 mg sodium
+        self.client.post(self.records_url, {
+            "product_name": "Product A",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"sodium": {"value": 450.0, "serving_value": 450.0, "unit": "mg"}}
+        }, format="json")
+
+        # Product B: 350 mg sodium
+        self.client.post(self.records_url, {
+            "product_name": "Product B",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"sodium": {"value": 350.0, "serving_value": 350.0, "unit": "mg"}}
+        }, format="json")
+
+        # Product C: 600 mg sodium
+        self.client.post(self.records_url, {
+            "product_name": "Product C",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"sodium": {"value": 600.0, "serving_value": 600.0, "unit": "mg"}}
+        }, format="json")
+
+        # Total sodium: 450 + 350 + 600 = 1,400 mg (70.0% of 2,000 mg)
+        summary_resp = self.client.get(self.summary_url)
+        self.assertEqual(summary_resp.status_code, status.HTTP_200_OK)
+        data = summary_resp.json()
+        self.assertEqual(data["total_products_confirmed"], 3)
+
+        sodium_tot = data["nutrient_totals"]["sodium"]
+        self.assertEqual(sodium_tot["amount"], 1400.0)
+        self.assertEqual(sodium_tot["percentage"], 70.0)
+        self.assertEqual(len(sodium_tot["contributors"]), 3)
+
+        # Now add Product D with 700 mg sodium -> Total 2,100 mg (105.0% -> Exceeds FSSAI 2,000 mg limit)
+        self.client.post(self.records_url, {
+            "product_name": "Product D",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"sodium": {"value": 700.0, "serving_value": 700.0, "unit": "mg"}}
+        }, format="json")
+
+        summary_resp = self.client.get(self.summary_url)
+        data = summary_resp.json()
+        self.assertEqual(data["nutrient_totals"]["sodium"]["amount"], 2100.0)
+        self.assertEqual(data["nutrient_totals"]["sodium"]["percentage"], 105.0)
+
+        # Multi-product alert must be generated
+        alerts = data.get("alerts", [])
+        sodium_alerts = [a for a in alerts if a["nutrient_key"] == "sodium"]
+        self.assertEqual(len(sodium_alerts), 1)
+        alert = sodium_alerts[0]
+        self.assertEqual(alert["percentage"], 105.0)
+        self.assertIn("Product A", alert["message"])
+        self.assertIn("Product D", alert["message"])
+
+    def test_missing_nutrient_data_flags_incomplete_without_becoming_zero(self):
+        # Product 1 has sodium 500mg
+        self.client.post(self.records_url, {
+            "product_name": "Salted Crackers",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {
+                "sodium": {"value": 500.0, "unit": "mg", "status": "detected"},
+                "dietary_fibre": {"value": None, "unit": "g", "status": "not_provided"}
+            }
+        }, format="json")
+
+        summary_resp = self.client.get(self.summary_url)
+        data = summary_resp.json()
+
+        # Fibre was not provided by Salted Crackers
+        fibre_tot = data["nutrient_totals"]["dietary_fibre"]
+        self.assertTrue(fibre_tot["is_incomplete"])
+        self.assertIn("Salted Crackers", fibre_tot["missing_products"])
+        # Must not fabricate a zero amount
+        self.assertIsNone(fibre_tot["amount"])
+
+    def test_editing_record_recalculates_daily_summary(self):
+        from .models import ConsumptionRecord
+        # Create record with 1 serving of 500 mg sodium
+        create_resp = self.client.post(self.records_url, {
+            "product_name": "Soup Can",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"sodium": {"value": 500.0, "serving_value": 500.0, "unit": "mg"}}
+        }, format="json")
+        rec_id = create_resp.json()["record"]["id"]
+
+        # Edit to 2.5 servings
+        patch_url = reverse("intake-record-detail", kwargs={"pk": rec_id})
+        patch_resp = self.client.patch(patch_url, {"servings_consumed": 2.5}, format="json")
+        self.assertEqual(patch_resp.status_code, status.HTTP_200_OK)
+
+        # Summary must immediately reflect 500 * 2.5 = 1250 mg
+        summary_resp = self.client.get(self.summary_url)
+        data = summary_resp.json()
+        self.assertEqual(data["nutrient_totals"]["sodium"]["amount"], 1250.0)
+
+    def test_deleting_record_recalculates_daily_summary(self):
+        from .models import ConsumptionRecord
+        create_resp = self.client.post(self.records_url, {
+            "product_name": "Temporary Item",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"sodium": {"value": 300.0, "serving_value": 300.0, "unit": "mg"}}
+        }, format="json")
+        rec_id = create_resp.json()["record"]["id"]
+
+        del_url = reverse("intake-record-detail", kwargs={"pk": rec_id})
+        del_resp = self.client.delete(del_url)
+        self.assertEqual(del_resp.status_code, status.HTTP_200_OK)
+
+        summary_resp = self.client.get(self.summary_url)
+        data = summary_resp.json()
+        self.assertEqual(data["total_products_confirmed"], 0)
+        self.assertEqual(data["nutrient_totals"]["sodium"]["amount"], 0.0)
+
+    def test_duplicate_requests_do_not_duplicate_intake(self):
+        from .models import ConsumptionRecord
+
+        payload = {
+            "product_name": "Oatmeal",
+            "scan_id": "unique-scan-session-999",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"energy": {"value": 150.0, "unit": "kcal"}}
+        }
+        # First request
+        resp1 = self.client.post(self.records_url, payload, format="json")
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED)
+
+        # Duplicate retry request with same scan_id
+        resp2 = self.client.post(self.records_url, payload, format="json")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp2.json()["is_duplicate"])
+
+        # Exactly 1 record in database
+        self.assertEqual(ConsumptionRecord.objects.filter(user=self.user).count(), 1)
+
+    def test_user_cannot_access_or_tamper_with_another_users_records(self):
+        # Create record belonging to user 1
+        create_resp = self.client.post(self.records_url, {
+            "product_name": "User 1 Secret Food",
+            "servings_consumed": 1.0,
+            "nutrition_facts": {"energy": {"value": 200.0, "unit": "kcal"}}
+        }, format="json")
+        rec_id = create_resp.json()["record"]["id"]
+
+        # Switch client to user 2
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.other_token.key}")
+
+        detail_url = reverse("intake-record-detail", kwargs={"pk": rec_id})
+        # User 2 tries to GET
+        get_resp = self.client.get(detail_url)
+        self.assertEqual(get_resp.status_code, status.HTTP_404_NOT_FOUND)
+
+        # User 2 tries to PATCH
+        patch_resp = self.client.patch(detail_url, {"servings_consumed": 5.0}, format="json")
+        self.assertEqual(patch_resp.status_code, status.HTTP_404_NOT_FOUND)
+
+        # User 2 tries to DELETE
+        del_resp = self.client.delete(detail_url)
+        self.assertEqual(del_resp.status_code, status.HTTP_404_NOT_FOUND)
+
+        # User 2's daily summary must be empty
+        summary_resp = self.client.get(self.summary_url)
+        self.assertEqual(summary_resp.json()["total_products_confirmed"], 0)
+
+    def test_date_rollover_and_historical_records_retention(self):
+        from .models import ConsumptionRecord
+        from datetime import date
+
+        # Create record on yesterday's date
+        yesterday = date(2026, 10, 16)
+        today = date(2026, 10, 17)
+
+        ConsumptionRecord.objects.create(
+            user=self.user,
+            product_name="Yesterday Oatmeal",
+            servings_consumed=1.0,
+            consumption_date=yesterday,
+            nutrients_snapshot={"sodium": {"amount": 500.0, "unit": "mg", "is_missing": False}},
+            reference_system="FSSAI_ICMR_2020",
+        )
+
+        ConsumptionRecord.objects.create(
+            user=self.user,
+            product_name="Today Salad",
+            servings_consumed=1.0,
+            consumption_date=today,
+            nutrients_snapshot={"sodium": {"amount": 250.0, "unit": "mg", "is_missing": False}},
+            reference_system="FSSAI_ICMR_2020",
+        )
+
+        # Query today specifically
+        today_resp = self.client.get(f"{self.summary_url}?date=2026-10-17")
+        self.assertEqual(today_resp.status_code, status.HTTP_200_OK)
+        today_data = today_resp.json()
+        self.assertEqual(today_data["total_products_confirmed"], 1)
+        self.assertEqual(today_data["nutrient_totals"]["sodium"]["amount"], 250.0)
+
+        # Query yesterday specifically
+        yesterday_resp = self.client.get(f"{self.summary_url}?date=2026-10-16")
+        self.assertEqual(yesterday_resp.status_code, status.HTTP_200_OK)
+        yesterday_data = yesterday_resp.json()
+        self.assertEqual(yesterday_data["total_products_confirmed"], 1)
+        self.assertEqual(yesterday_data["nutrient_totals"]["sodium"]["amount"], 500.0)
+
+        # Verify history dates endpoint lists both dates
+        dates_resp = self.client.get(reverse("intake-history-dates"))
+        self.assertEqual(dates_resp.status_code, status.HTTP_200_OK)
+        dates_data = dates_resp.json()["dates"]
+        self.assertIn("2026-10-16", dates_data)
+        self.assertIn("2026-10-17", dates_data)
 
 
 

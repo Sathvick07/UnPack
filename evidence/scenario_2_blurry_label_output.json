@@ -1,0 +1,260 @@
+{
+  "file_name": "blurr image.jpeg",
+  "quality": {
+    "is_valid": true,
+    "file_name": "blurr image.jpeg",
+    "file_size_kb": 505.9,
+    "width": 900,
+    "height": 1600,
+    "format": "JPEG",
+    "aspect_ratio": 1.78,
+    "contrast_score": 59.1,
+    "blur_metric": 71.5,
+    "is_curved_surface": false,
+    "quality_tier": "UNCERTAIN",
+    "quality_score": 55,
+    "warnings": [
+      "Image appears blurry. Please retake the photo with the label in focus."
+    ],
+    "retake_recommendations": [
+      "Ensure the camera lens is focused squarely on the nutrition panel and hold steady."
+    ]
+  },
+  "readability_status": "UNCERTAIN",
+  "is_complete": false,
+  "completeness_score": 50,
+  "raw_text": "BINGO! POTATO CHIPS\nINGREDIENTS: POTATO (62.4%), EDIBLE VEGETABLE OIL (PALM OIL & REFINED PALMOLIVE OIL)**, SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631)).\n*TO KNOW THE SPECIFIC TYPE OF OIL USED, MATCH THE SYMBOL ('I' OR 'S') LAST CHARACTER OF BATCH NUMBER WHERE 'I' DENOTES REFINED PALM OIL,\n**AS DENOTES REFINED RICE BRAN OIL.\n^USED AS FLAVOURING AGENTS.\nCONTAINS MILK, WHEAT AND SOY. MAY CONTAIN BARLEY.\nDO NOT BUY THE PACK IF FOUND TAMPERED WITH.\nSTORE IN A COOL, DRY & HYGIENIC PLACE.\nPROPRIETARY FOOD - POTATO CHIPS (7.1.1)\nMRP \u20b9 30.00 incl. of all taxes\nNUTRITIONAL INFORMATION (Approx. Values):\nEnergy (kcal) Per 100g: 524, Per serving* (30g): 157, % RDA* per serving: 8\nProtein (g) Per 100g: 7.1, Per serving* (30g): 2.1, % RDA* per serving: -\nCarbohydrate (g) Per 100g: 56.6, Per serving* (30g): 17.0, % RDA* per serving: -\nTotal Sugars (g) Per 100g: 5.8, Per serving* (30g): 1.7, % RDA* per serving: -\nAdded Sugars (g) Per 100g: 2.9, Per serving* (30g): 0.9, % RDA* per serving: 3.6\nTotal Fat (g) Per 100g: 31.5, Per serving* (30g): 9.5, % RDA* per serving: 14\nSaturated Fat (g) Per 100g: 13.9, Per serving* (30g): 4.2, % RDA* per serving: 19\nTrans Fat (g) Per 100g: 0.10, Per serving* (30g): 0.03, % RDA* per serving: 1\nSodium (mg) Per 100g: 811.9, Per serving* (30g): 243.6, % RDA* per serving: 12\nFOR FEEDBACK / COMPLAINT CONTACT CONSUMER CARE OFFICE, ITC LIMITED, ITC GREEN CENTRE, 10TH FLOOR, NO. 18, BANASWADI MAIN ROAD, BENGALURU - 560005.\nitccares@itc.in\n1800 425 444 444\nQUALITY GUARANTEED\n8 909961 007167",
+  "ingredients": [
+    {
+      "name": "POTATO (62.4%)",
+      "source_text": "POTATO (62.4%)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "EDIBLE VEGETABLE OIL (PALM OIL & REFINED PALMOLIVE OIL)**",
+      "source_text": "EDIBLE VEGETABLE OIL (PALM OIL & REFINED PALMOLIVE OIL)**",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631))",
+      "source_text": "SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631))",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    }
+  ],
+  "allergen_statements": [
+    {
+      "notice_type": "contains",
+      "type": "contains",
+      "source_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "statement": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "notice_type": "may_contain",
+      "type": "may_contain",
+      "source_text": "MAY CONTAIN BARLEY.",
+      "statement": "MAY CONTAIN BARLEY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "nutrition_facts": {
+    "energy": {
+      "nutrient": "energy",
+      "value": 524.0,
+      "unit": "kcal",
+      "basis": "per_100g",
+      "serving_value": 157.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Energy (kcal) 524 157",
+      "is_zero_explicit": false
+    },
+    "fat": {
+      "nutrient": "fat",
+      "value": 31.5,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 9.5,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Total Fat (g) 31.5 9.5",
+      "is_zero_explicit": false
+    },
+    "saturated_fat": {
+      "nutrient": "saturated_fat",
+      "value": 13.9,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 4.2,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Saturated Fat (g) 13.9 4.2",
+      "is_zero_explicit": false
+    },
+    "trans_fat": {
+      "nutrient": "trans_fat",
+      "value": 0.1,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 0.03,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Trans Fat (g) 0.10 0.03",
+      "is_zero_explicit": false
+    },
+    "carbohydrates": {
+      "nutrient": "carbohydrates",
+      "value": 56.6,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 17.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Carbohydrate (g) 56.6 17.0",
+      "is_zero_explicit": false
+    },
+    "sugars": {
+      "nutrient": "sugars",
+      "value": 5.8,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 1.7,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Total Sugars (g) 5.8 1.7",
+      "is_zero_explicit": false
+    },
+    "added_sugars": {
+      "nutrient": "added_sugars",
+      "value": null,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": null,
+      "serving_basis": "",
+      "status": "not_provided",
+      "source_text": "",
+      "is_zero_explicit": false
+    },
+    "protein": {
+      "nutrient": "protein",
+      "value": 7.1,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 2.1,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Protein (g) 7.1 2.1",
+      "is_zero_explicit": false
+    },
+    "sodium": {
+      "nutrient": "sodium",
+      "value": 811.9,
+      "unit": "mg",
+      "basis": "per_100g",
+      "serving_value": 243.6,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Sodium (mg) 811.9 243.6",
+      "is_zero_explicit": false
+    }
+  },
+  "findings": [
+    {
+      "id": "peanut",
+      "restriction": "peanut",
+      "display_name": "Peanuts",
+      "status": "Missing or unreadable evidence",
+      "result_status": "Missing or unreadable evidence",
+      "legacy_status": "UNKNOWN / VERIFY",
+      "severity": "ATTENTION",
+      "explanation": "Label clarity is compromised, curved, or contains unreadable sections. Absence of 'Peanuts' cannot be verified from this image.",
+      "evidence": "Portion of ingredient list or allergen panel is unreadable, curved, or incomplete.",
+      "supporting_text": "Portion of ingredient list or allergen panel is unreadable, curved, or incomplete.",
+      "evidence_snippet": "Unreadable or obscured section on label",
+      "bounding_box": null,
+      "action_recommendation": "Check physical packaging carefully before consuming. Do not assume unread labels are safe.",
+      "source_type": "UNCERTAINTY_FLAG",
+      "requires_manual_confirmation": true
+    },
+    {
+      "id": "gluten",
+      "restriction": "gluten",
+      "display_name": "Gluten",
+      "status": "Confirmed conflict",
+      "result_status": "Confirmed conflict",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Ingredient or declared allergen matching 'Gluten' was confirmed on the packaging.",
+      "evidence": "Allergen statement: \"CONTAINS MILK, WHEAT AND SOY.\" \u2022 Ingredient list: \"SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631))\"",
+      "supporting_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "evidence_snippet": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "action_recommendation": "Avoid consuming this product. Packaging explicitly confirms presence of Gluten.",
+      "source_type": "EXACT_LABEL_TEXT",
+      "requires_manual_confirmation": false
+    },
+    {
+      "id": "milk",
+      "restriction": "milk",
+      "display_name": "Dairy / Milk",
+      "status": "Confirmed conflict",
+      "result_status": "Confirmed conflict",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Ingredient or declared allergen matching 'Dairy / Milk' was confirmed on the packaging.",
+      "evidence": "Allergen statement: \"CONTAINS MILK, WHEAT AND SOY.\" \u2022 Ingredient list: \"SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631))\"",
+      "supporting_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "evidence_snippet": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "action_recommendation": "Avoid consuming this product. Packaging explicitly confirms presence of Dairy / Milk.",
+      "source_type": "EXACT_LABEL_TEXT",
+      "requires_manual_confirmation": false
+    }
+  ],
+  "contradictions": [],
+  "ambiguous_ingredients": [
+    {
+      "ingredient_name": "SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631))",
+      "source_text": "SEASONING (SALT, RED CHILLI POWDER (0.4%), SPICES & CONDIMENTS, SUGAR, ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, ACIDS, NATURE IDENTICAL FLAVOURING SUBSTANCES, MILK SOLIDS, FLAVOURING SUBSTANCES, SOY PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), TARTARIC ACID, GARLIC POWDER AND FLAVOUR ENHANCERS (INS 627, INS 631))",
+      "category": "Flavorings / Natural Flavors",
+      "explanation": "May derive from animal, gluten, or nut sources",
+      "bounding_box": null,
+      "status": "Uncertain interpretation"
+    }
+  ],
+  "uncertainty_flags": [
+    "Image appears blurry. Please retake the photo with the label in focus.",
+    "Image quality is below threshold; unlisted ingredients cannot be assumed absent."
+  ],
+  "manual_confirmation_needed": true,
+  "retake_prompt": "Ensure the camera lens is focused squarely on the nutrition panel and hold steady."
+}

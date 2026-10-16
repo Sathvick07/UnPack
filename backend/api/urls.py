@@ -8,6 +8,11 @@ from .views import (
     LogoutView,
     CurrentUserView,
     UserProfileView,
+    ReferenceLimitsView,
+    ConsumptionRecordListView,
+    ConsumptionRecordDetailView,
+    DailyIntakeSummaryView,
+    IntakeHistoryDatesView,
 )
 
 urlpatterns = [
@@ -21,4 +26,10 @@ urlpatterns = [
     path('auth/me/', CurrentUserView.as_view(), name='auth-me'),
     # User profile & onboarding endpoints
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+    # Daily Intake Ledger & Reference Limits endpoints
+    path('intake/reference-limits/', ReferenceLimitsView.as_view(), name='intake-reference-limits'),
+    path('intake/records/', ConsumptionRecordListView.as_view(), name='intake-records'),
+    path('intake/records/<int:pk>/', ConsumptionRecordDetailView.as_view(), name='intake-record-detail'),
+    path('intake/summary/', DailyIntakeSummaryView.as_view(), name='intake-summary'),
+    path('intake/history/dates/', IntakeHistoryDatesView.as_view(), name='intake-history-dates'),
 ]

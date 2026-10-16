@@ -97,7 +97,8 @@ def validate_extraction_completeness(
     raw_text: str,
     ingredients: List[Dict[str, Any]],
     nutrition_facts: Dict[str, Dict[str, Any]],
-    quality_tier: str
+    quality_tier: str,
+    allergen_statements: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Evaluates whether the extracted label information appears complete, truncated, or partly unreadable.
@@ -118,7 +119,10 @@ def validate_extraction_completeness(
         is_incomplete = True
 
     # Check for missing allergen statement
-    has_allergen_stmt = bool(re.search(r"(?:contains|allergens?|may contain):", raw_clean))
+    has_allergen_stmt = (
+        bool(allergen_statements)
+        or bool(re.search(r"\b(?:contains|allergens?|may contain)\b", raw_clean))
+    )
     if not has_allergen_stmt and len(ingredients) > 0:
         flags.append("No explicit allergen statement ('Contains' or 'May Contain') was identified on this label panel.")
 

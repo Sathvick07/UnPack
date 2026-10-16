@@ -1,0 +1,393 @@
+{
+  "file_name": "WhatsApp Image 2026-10-16 at 7.46.26 PM.jpeg",
+  "quality": {
+    "is_valid": true,
+    "file_name": "WhatsApp Image 2026-10-16 at 7.46.26 PM.jpeg",
+    "file_size_kb": 694.4,
+    "width": 900,
+    "height": 1600,
+    "format": "JPEG",
+    "aspect_ratio": 1.78,
+    "contrast_score": 78.4,
+    "blur_metric": 1602.2,
+    "is_curved_surface": true,
+    "quality_tier": "MODERATE",
+    "quality_score": 75,
+    "warnings": [
+      "Curved cylindrical packaging surface detected. Text along the edges may be distorted or wrapped out of view."
+    ],
+    "retake_recommendations": [
+      "Rotate cylindrical bottles or cans to capture each label panel flat-on, or take multiple overlapping photos."
+    ]
+  },
+  "readability_status": "MODERATE",
+  "is_complete": true,
+  "completeness_score": 100,
+  "raw_text": "There is magic in each bite.\nBingo! POTATO CHIPS\nLic. No. 10012031000312\nFOR BRAND MANUFACTURING AND UNITS' FSSAI LICENSE ADDRESS, PLEASE SCAN\nWe go to great lengths to choose the best potatoes\nThen slice them to perfection\nA unique process gives it the distinctive crunch\nFinally, we sprinkle it with secret flavours to give you the most flavourful chips.\nMast Chilli Sprinkled\nCrispy and hot chillies are used in Bingo! Mast Chilli Sprinkled Potato Chips to make it mouth-watering and eye-watering. Bite into one, it's truly irresistible\nINGREDIENTS: POTATO (87.4%), *EDIBLE VEGETABLE OIL (PALM OIL, SOUL SEED OIL), SALT, RED CHILLI POWDER (0.4%), MALTODEXTRIN, *SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN), NATURE IDENTICAL FLAVOURING SUBSTANCES, NATURAL FLAVOURING SUBSTANCES, SUGAR, TOMATO POWDER, HYDROLYSED VEGETABLE PROTEIN, ACIDITY REGULATORS (MALIC ACID, CITRIC ACID), GARLIC POWDER AND FLAVOUR ENHANCERS (621, 635). *DO NOT KNOW THE SPECIFIC TYPE OF OIL USED, MATCH TEN WITH LAST CHARACTER OF BATCH NUMBER WHEREIN ^ DENOTES REFINED PALM OIL, ^^ DENOTES REFINED RICE BRAN OIL.\n#USED AS FLAVOURING AGENTS.\nCONTAINS MILK, WHEAT AND SOY. MAY CONTAIN BARLEY\nDO NOT BUY THE PACK IF FOUND TAMPERED WITH.\nSTORE IN A COOL, DRY & HYGIENIC PLACE.\nPROPRIETARY FOOD - POTATO CHIPS (15.1)\n~MRP \u20b9 30.00 incl. of all taxes\nNUTRITIONAL INFORMATION (Approx. Values)\nPer 100g | Per Serve (20g) | %RDA per serve\nEnergy (kcal) | 524 | 105 | 5.3\nProtein (g) | 7.1 | 1.4 | -\nCarbohydrate (g) | 50.6 | 10.1 | -\n- Total Sugars (g) | 1.6 | 0.3 | -\n- Added Sugars (g) | 0.9 | 0.2 | 0.4\nTotal Fat (g) | 33.5 | 6.7 | 10.0\n- Saturated fat (g)^ | 7.8 | 1.6 | 7.1\n- Saturated fat (g)^^ | 15.7 | 3.1 | 14.3\n- Trans fat (g)^ | 0.10 | 0.02 | 1\n- Trans fat (g)^^ | 0.09 | 0.018 | \nCholesterol (mg) | 0.3 | 0.06 | \nSodium (mg) | 835.0 | 167.0 | 8.4\n*Other than naturally occurring trans fat\n^Refer coding window for Approx. No. of Serves Per Pack (NS)\n#NS/BN/ \u20b9 PER g: 2.2/GP128F6^/0.67\n28 JUN26/25DEC26\nMFD./USE BY: 44.8 g\nNET WT.:\nFOR FEEDBACK / COMPLAINT CONTACT: CONSUMER CARE OFFICE, ITC LIMITED, ITC GREEN CENTRE - 10TH FLOOR, NO. 18, BANASWADI MAIN ROAD, BENGALURU - 560005.\nitccares@itc.in\n1800 425 444 444\nQUALITY GUARANTEED.\nSTORE LOCATOR store.itcportal.com\nSegregate & Dispose Help Recycling\nPP, PET & HDPE Dry Waste\n8 909081 007187",
+  "ingredients": [
+    {
+      "name": "POTATO (87.4%)",
+      "source_text": "POTATO (87.4%)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "*EDIBLE VEGETABLE OIL (PALM OIL, SOUL SEED OIL)",
+      "source_text": "*EDIBLE VEGETABLE OIL (PALM OIL, SOUL SEED OIL)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "SALT",
+      "source_text": "SALT",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "RED CHILLI POWDER (0.4%)",
+      "source_text": "RED CHILLI POWDER (0.4%)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "MALTODEXTRIN",
+      "source_text": "MALTODEXTRIN",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)",
+      "source_text": "*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "NATURE IDENTICAL FLAVOURING SUBSTANCES",
+      "source_text": "NATURE IDENTICAL FLAVOURING SUBSTANCES",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "NATURAL FLAVOURING SUBSTANCES",
+      "source_text": "NATURAL FLAVOURING SUBSTANCES",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "SUGAR",
+      "source_text": "SUGAR",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "TOMATO POWDER",
+      "source_text": "TOMATO POWDER",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "HYDROLYSED VEGETABLE PROTEIN",
+      "source_text": "HYDROLYSED VEGETABLE PROTEIN",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "ACIDITY REGULATORS (MALIC ACID, CITRIC ACID)",
+      "source_text": "ACIDITY REGULATORS (MALIC ACID, CITRIC ACID)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "GARLIC POWDER",
+      "source_text": "GARLIC POWDER",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    },
+    {
+      "name": "FLAVOUR ENHANCERS (621, 635)",
+      "source_text": "FLAVOUR ENHANCERS (621, 635)",
+      "status": "detected",
+      "confidence": 0.9,
+      "bounding_box": null,
+      "notes": ""
+    }
+  ],
+  "allergen_statements": [
+    {
+      "notice_type": "contains",
+      "type": "contains",
+      "source_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "statement": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "notice_type": "may_contain",
+      "type": "may_contain",
+      "source_text": "MAY CONTAIN BARLEY",
+      "statement": "MAY CONTAIN BARLEY",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "nutrition_facts": {
+    "energy": {
+      "nutrient": "energy",
+      "value": 524.0,
+      "unit": "kcal",
+      "basis": "per_100g",
+      "serving_value": 105.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Energy (kcal) 524 105",
+      "is_zero_explicit": false
+    },
+    "fat": {
+      "nutrient": "fat",
+      "value": 33.5,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 6.7,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Total Fat (g) 33.5 6.7",
+      "is_zero_explicit": false
+    },
+    "saturated_fat": {
+      "nutrient": "saturated_fat",
+      "value": 7.8,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 1.6,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "- Saturated fat (g)^ 7.8 1.6",
+      "is_zero_explicit": false
+    },
+    "trans_fat": {
+      "nutrient": "trans_fat",
+      "value": 0.1,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 0.02,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "- Trans fat (g)^ 0.10 0.02",
+      "is_zero_explicit": false
+    },
+    "carbohydrates": {
+      "nutrient": "carbohydrates",
+      "value": 50.6,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 10.1,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Carbohydrate (g) 50.6 10.1",
+      "is_zero_explicit": false
+    },
+    "sugars": {
+      "nutrient": "sugars",
+      "value": 1.6,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 0.3,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "- Total Sugars (g) 1.6 0.3",
+      "is_zero_explicit": false
+    },
+    "added_sugars": {
+      "nutrient": "added_sugars",
+      "value": null,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": null,
+      "serving_basis": "",
+      "status": "not_provided",
+      "source_text": "",
+      "is_zero_explicit": false
+    },
+    "protein": {
+      "nutrient": "protein",
+      "value": 7.1,
+      "unit": "g",
+      "basis": "per_100g",
+      "serving_value": 1.4,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Protein (g) 7.1 1.4",
+      "is_zero_explicit": false
+    },
+    "sodium": {
+      "nutrient": "sodium",
+      "value": 835.0,
+      "unit": "mg",
+      "basis": "per_100g",
+      "serving_value": 167.0,
+      "serving_basis": "per_serving",
+      "status": "detected",
+      "source_text": "Sodium (mg) 835.0 167.0",
+      "is_zero_explicit": false
+    }
+  },
+  "findings": [
+    {
+      "id": "gluten",
+      "restriction": "gluten",
+      "display_name": "Gluten",
+      "status": "Confirmed conflict",
+      "result_status": "Confirmed conflict",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Ingredient or declared allergen matching 'Gluten' was confirmed on the packaging.",
+      "evidence": "Allergen statement: \"CONTAINS MILK, WHEAT AND SOY.\" \u2022 Ingredient list: \"MALTODEXTRIN\" \u2022 Ingredient list: \"*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)\"",
+      "supporting_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "evidence_snippet": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "action_recommendation": "Avoid consuming this product. Packaging explicitly confirms presence of Gluten.",
+      "source_type": "EXACT_LABEL_TEXT",
+      "requires_manual_confirmation": false
+    },
+    {
+      "id": "wheat",
+      "restriction": "wheat",
+      "display_name": "Wheat",
+      "status": "Confirmed conflict",
+      "result_status": "Confirmed conflict",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Ingredient or declared allergen matching 'Wheat' was confirmed on the packaging.",
+      "evidence": "Allergen statement: \"CONTAINS MILK, WHEAT AND SOY.\" \u2022 Ingredient list: \"*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)\"",
+      "supporting_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "evidence_snippet": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "action_recommendation": "Avoid consuming this product. Packaging explicitly confirms presence of Wheat.",
+      "source_type": "EXACT_LABEL_TEXT",
+      "requires_manual_confirmation": false
+    },
+    {
+      "id": "peanut",
+      "restriction": "peanut",
+      "display_name": "Peanuts",
+      "status": "Uncertain interpretation",
+      "result_status": "Uncertain interpretation",
+      "legacy_status": "UNKNOWN / VERIFY",
+      "severity": "ATTENTION",
+      "explanation": "Readable ingredients include '*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)' (Spices / Seasonings), which may conceal derived sources. Absence of 'Peanuts' remains uncertain.",
+      "evidence": "Ambiguous ingredient on label: \"*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)\"",
+      "supporting_text": "*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)",
+      "evidence_snippet": "*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)",
+      "bounding_box": null,
+      "action_recommendation": "Review ingredient '*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)' with manufacturer before consuming.",
+      "source_type": "AMBIGUOUS_INGREDIENT",
+      "requires_manual_confirmation": true
+    },
+    {
+      "id": "milk",
+      "restriction": "milk",
+      "display_name": "Dairy / Milk",
+      "status": "Confirmed conflict",
+      "result_status": "Confirmed conflict",
+      "legacy_status": "CONFLICT DETECTED",
+      "severity": "CRITICAL",
+      "explanation": "Ingredient or declared allergen matching 'Dairy / Milk' was confirmed on the packaging.",
+      "evidence": "Allergen statement: \"CONTAINS MILK, WHEAT AND SOY.\"",
+      "supporting_text": "CONTAINS MILK, WHEAT AND SOY.",
+      "evidence_snippet": "CONTAINS MILK, WHEAT AND SOY.",
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "action_recommendation": "Avoid consuming this product. Packaging explicitly confirms presence of Dairy / Milk.",
+      "source_type": "EXACT_LABEL_TEXT",
+      "requires_manual_confirmation": false
+    }
+  ],
+  "contradictions": [],
+  "ambiguous_ingredients": [
+    {
+      "ingredient_name": "*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)",
+      "source_text": "*SPICES AND CONDIMENTS (CONTAINING ONION POWDER, MAIDA (REFINED WHEAT FLOUR), BLACK SALT, CUMIN)",
+      "category": "Spices / Seasonings",
+      "explanation": "May conceal mustard, celery, or sesame without declaration",
+      "bounding_box": null,
+      "status": "Uncertain interpretation"
+    },
+    {
+      "ingredient_name": "NATURE IDENTICAL FLAVOURING SUBSTANCES",
+      "source_text": "NATURE IDENTICAL FLAVOURING SUBSTANCES",
+      "category": "Flavorings / Natural Flavors",
+      "explanation": "May derive from animal, gluten, or nut sources",
+      "bounding_box": null,
+      "status": "Uncertain interpretation"
+    },
+    {
+      "ingredient_name": "NATURAL FLAVOURING SUBSTANCES",
+      "source_text": "NATURAL FLAVOURING SUBSTANCES",
+      "category": "Flavorings / Natural Flavors",
+      "explanation": "May derive from animal, gluten, or nut sources",
+      "bounding_box": null,
+      "status": "Uncertain interpretation"
+    },
+    {
+      "ingredient_name": "HYDROLYSED VEGETABLE PROTEIN",
+      "source_text": "HYDROLYSED VEGETABLE PROTEIN",
+      "category": "Hydrolyzed Protein",
+      "explanation": "Botanical origin (soy, wheat, or pea) unspecified",
+      "bounding_box": null,
+      "status": "Uncertain interpretation"
+    }
+  ],
+  "uncertainty_flags": [
+    "Curved cylindrical packaging surface detected. Text along the edges may be distorted or wrapped out of view."
+  ],
+  "manual_confirmation_needed": true,
+  "retake_prompt": "Rotate cylindrical bottles or cans to capture each label panel flat-on, or take multiple overlapping photos."
+}

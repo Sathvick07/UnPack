@@ -3,10 +3,13 @@ import { AppPage } from '../types/navigation';
 import { LabelAnalysisReport } from '../types/label';
 import { analyzeLabel, verifyFields, updateUserProfile } from '../api/client';
 import { EvidenceLens } from '../components/EvidenceLens';
+import { RecordConsumptionModal } from '../components/RecordConsumptionModal';
 import { useAuth } from '../context/AuthContext';
 
 interface ScanPageProps {
   onNavigate: (page: AppPage) => void;
+  onScanCompleted?: (report: LabelAnalysisReport, fileName: string) => void;
+  onClearPendingScan?: () => void;
 }
 
 const COMMON_RESTRICTIONS = [
@@ -21,7 +24,11 @@ const COMMON_RESTRICTIONS = [
   { id: 'sesame', label: 'Sesame' },
 ];
 
-export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
+export const ScanPage: React.FC<ScanPageProps> = ({
+  onNavigate,
+  onScanCompleted,
+  onClearPendingScan,
+}) => {
   const { user, token, isAuthenticated, updateUserContext } = useAuth();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -30,6 +37,10 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisReport, setAnalysisReport] = useState<LabelAnalysisReport | null>(null);
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState<boolean>(false);
+  const [recordSuccessMsg, setRecordSuccessMsg] = useState<string | null>(null);
+  const [isConsumptionConfirmed, setIsConsumptionConfirmed] = useState<boolean>(false);
+  const [isScanDismissed, setIsScanDismissed] = useState<boolean>(false);
 
   // Load saved preferences if available
   const [restrictions, setRestrictions] = useState<string[]>(() => {
@@ -141,6 +152,10 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
     setAnalysisReport(null);
     setAnalysisError(null);
     setIsAnalyzing(false);
+    setIsConsumptionConfirmed(false);
+    setRecordSuccessMsg(null);
+    setIsScanDismissed(false);
+    onClearPendingScan?.();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -153,10 +168,14 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
     if (!selectedFile) return;
     setIsAnalyzing(true);
     setAnalysisError(null);
+    setIsConsumptionConfirmed(false);
+    setRecordSuccessMsg(null);
+    setIsScanDismissed(false);
 
     try {
       const report = await analyzeLabel(selectedFile, restrictions);
       setAnalysisReport(report);
+      onScanCompleted?.(report, selectedFile.name);
     } catch (err: any) {
       setAnalysisError(err.message || 'Failed to analyze food label. Please check your network connection.');
     } finally {
@@ -420,18 +439,110 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
         </div>
       ) : (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={handleClear}
-            >
-              ← Scan Another Label
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleClear}
+              >
+                ← Scan Another Label
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setIsRecordModalOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <span>🥗</span>
+                <span>{isConsumptionConfirmed ? 'Log Another Portion' : 'Record Consumption'}</span>
+              </button>
+            </div>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               Completed in LabelLens engine
             </span>
           </div>
+
+          {/* Consumption Status Banners */}
+          {isConsumptionConfirmed && recordSuccessMsg && (
+            <div
+              style={{
+                background: 'rgba(132, 204, 22, 0.12)',
+                border: '1px solid rgba(132, 204, 22, 0.4)',
+                borderRadius: '10px',
+                padding: '0.75rem 1.1rem',
+                marginBottom: '1.25rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>✅</span>
+                <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {recordSuccessMsg}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => onNavigate('nutrition')}
+              >
+                View Daily Intake Ledger →
+              </button>
+            </div>
+          )}
+
+          {!isConsumptionConfirmed && !isScanDismissed && (
+            <div
+              style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '10px',
+                padding: '0.85rem 1.1rem',
+                marginBottom: '1.25rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <span style={{ fontSize: '1.3rem' }}>📋</span>
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Preview Mode — Rule: Preview ≠ Consumption
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Scanning alone never alters your daily intake history. Did you eat or drink this product?
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setIsRecordModalOpen(true)}
+                >
+                  🥗 Record Consumption
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    setIsScanDismissed(true);
+                    onClearPendingScan?.();
+                  }}
+                  title="Keep as preview without recording to intake ledger"
+                >
+                  Preview Only
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Active Dietary Restrictions Selector Bar (Preserved on Results Page) */}
           <div
@@ -485,6 +596,18 @@ export const ScanPage: React.FC<ScanPageProps> = ({ onNavigate }) => {
             previewUrl={previewUrl}
             onRetake={handleClear}
             onUpdateReport={setAnalysisReport}
+          />
+
+          <RecordConsumptionModal
+            report={analysisReport}
+            defaultProductName={selectedFile?.name || ''}
+            isOpen={isRecordModalOpen}
+            onClose={() => setIsRecordModalOpen(false)}
+            onSuccess={(msg) => {
+              setIsConsumptionConfirmed(true);
+              setRecordSuccessMsg(msg);
+              onClearPendingScan?.();
+            }}
           />
         </div>
       )}

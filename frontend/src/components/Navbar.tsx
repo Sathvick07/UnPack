@@ -12,6 +12,7 @@ interface NavbarProps {
   connectionState: ConnectionState;
   latency: number | null;
   onRefreshHealth: () => void;
+  onRequestLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   connectionState,
   latency,
   onRefreshHealth,
+  onRequestLogout,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
@@ -45,6 +47,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleLogout = async () => {
     setMobileMenuOpen(false);
+    if (onRequestLogout) {
+      onRequestLogout();
+      return;
+    }
     await logout();
     onNavigate('home');
   };
@@ -107,14 +113,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               About
             </button>
             {isAuthenticated && (
-              <button
-                type="button"
-                className={`nav-link ${currentPage === 'scan' ? 'active' : ''}`}
-                onClick={() => handleNavClick('scan')}
-                role="menuitem"
-              >
-                Scan Dashboard
-              </button>
+              <>
+                <button
+                  type="button"
+                  className={`nav-link ${currentPage === 'scan' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('scan')}
+                  role="menuitem"
+                >
+                  Scan Dashboard
+                </button>
+                <button
+                  type="button"
+                  className={`nav-link ${currentPage === 'nutrition' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('nutrition')}
+                  role="menuitem"
+                >
+                  Daily Intake
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -249,13 +265,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             About
           </button>
           {isAuthenticated && (
-            <button
-              type="button"
-              className={`mobile-menu-link ${currentPage === 'scan' ? 'active' : ''}`}
-              onClick={() => handleNavClick('scan')}
-            >
-              Scan Dashboard
-            </button>
+            <>
+              <button
+                type="button"
+                className={`mobile-menu-link ${currentPage === 'scan' ? 'active' : ''}`}
+                onClick={() => handleNavClick('scan')}
+              >
+                Scan Dashboard
+              </button>
+              <button
+                type="button"
+                className={`mobile-menu-link ${currentPage === 'nutrition' ? 'active' : ''}`}
+                onClick={() => handleNavClick('nutrition')}
+              >
+                Daily Intake
+              </button>
+            </>
           )}
 
           <div className="mobile-drawer-footer">

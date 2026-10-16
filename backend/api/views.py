@@ -1,4 +1,7 @@
 import json
+from datetime import datetime, date
+from django.utils import timezone
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -6,12 +9,23 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 
-from .models import UserProfile
+from .models import UserProfile, ConsumptionRecord
 from .serializers import (
     RegisterSerializer,
     LoginSerializer,
     UserProfileSerializer,
     UserDetailSerializer,
+    ConsumptionRecordSerializer,
+    CreateConsumptionRecordSerializer,
+)
+from .nutrition.reference_limits import (
+    REFERENCE_LIMITS,
+    REFERENCE_SYSTEM_NAME,
+    REFERENCE_SYSTEM_DISPLAY,
+)
+from .nutrition.calculator import (
+    calculate_product_contribution,
+    accumulate_daily_intake,
 )
 from .label_analyzer.ocr_engine import analyze_label_image
 from .label_analyzer.validator import validate_extraction_completeness
@@ -276,4 +290,284 @@ class UserProfileView(APIView):
 
     def patch(self, request, *args, **kwargs):
         return self.put(request, *args, **kwargs)
+
+
+class ReferenceLimitsView(APIView):
+    """
+    Returns the centralized daily reference limits and standards (FSSAI 2020 / ICMR 2020).
+    Provides display names, benchmark amounts, units, alert thresholds, and legal disclaimers.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        limits_data = {
+            k: ref.to_dict() for k, ref in REFERENCE_LIMITS.items()
+        }
+        return Response({
+            "reference_system": REFERENCE_SYSTEM_NAME,
+            "reference_system_display": REFERENCE_SYSTEM_DISPLAY,
+            "disclaimer": (
+                "Reference benchmarks are based on FSSAI (Labelling and Display) Regulations 2020 "
+                "and ICMR-NIN 2020 Dietary Guidelines for Indians (2,000 kcal diet). "
+                "These general educational references do not constitute individualized medical or clinical advice."
+            ),
+            "limits": limits_data,
+        }, status=status.HTTP_200_OK)
+
+
+class ConsumptionRecordListView(APIView):
+    """
+    Confirmed consumption records endpoint.
+    - POST: Explicit confirmation and persistence of a consumed food item.
+    - GET: Retrieves confirmed records for a specific date (or date range) for the authenticated user.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request, *args, **kwargs):
+        serializer = CreateConsumptionRecordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"errors": serializer.errors, "message": "Invalid consumption submission."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        data = serializer.validated_data
+        user = request.user
+        scan_id = data.get("scan_id", "").strip()
+        idempotency_key = data.get("idempotency_key", "").strip() or scan_id
+
+        # Idempotency / duplicate protection check
+        if idempotency_key:
+            existing = ConsumptionRecord.objects.filter(
+                user=user,
+                scan_id=idempotency_key,
+            ).first()
+            if existing:
+                # Return existing record to avoid duplicate consumption logging
+                rec_serializer = ConsumptionRecordSerializer(existing)
+                return Response({
+                    "record": rec_serializer.data,
+                    "message": "Consumption record already confirmed.",
+                    "is_duplicate": True,
+                }, status=status.HTTP_200_OK)
+
+        servings = data["servings_consumed"]
+        basis_used = data.get("basis_used", "per_serving")
+        raw_facts = data.get("nutrition_facts", {})
+        product_name = data.get("product_name", "Scanned Food Product").strip() or "Scanned Food Product"
+        serving_size = data.get("serving_size", "").strip()
+        serving_unit = data.get("serving_unit", "serving").strip() or "serving"
+        notes = data.get("notes", "").strip()
+
+        # Parse target consumption date
+        consumption_date = data.get("consumption_date")
+        if not consumption_date:
+            consumption_date = timezone.localdate()
+
+        # Authoritatively calculate exact nutrient contributions on the backend
+        contributions = calculate_product_contribution(
+            nutrition_facts=raw_facts,
+            servings_consumed=servings,
+            basis_used=basis_used,
+            serving_size=serving_size,
+            serving_unit=serving_unit,
+        )
+
+        try:
+            record = ConsumptionRecord.objects.create(
+                user=user,
+                product_name=product_name,
+                scan_id=idempotency_key,
+                servings_consumed=servings,
+                serving_size=serving_size,
+                serving_unit=serving_unit,
+                basis_used=basis_used,
+                consumption_date=consumption_date,
+                nutrients_snapshot=contributions,
+                reference_system=REFERENCE_SYSTEM_NAME,
+                notes=notes,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Database failure saving consumption record: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        rec_serializer = ConsumptionRecordSerializer(record)
+        return Response({
+            "record": rec_serializer.data,
+            "message": f"Successfully recorded consumption of {product_name} ({servings} serving{'s' if servings != 1 else ''}).",
+            "is_duplicate": False,
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request, *args, **kwargs):
+        date_str = request.query_params.get("date")
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Expected YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            target_date = timezone.localdate()
+
+        records = ConsumptionRecord.objects.filter(
+            user=request.user,
+            consumption_date=target_date,
+        ).order_by("-consumption_time")
+
+        serializer = ConsumptionRecordSerializer(records, many=True)
+        return Response({
+            "date": str(target_date),
+            "count": records.count(),
+            "records": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class ConsumptionRecordDetailView(APIView):
+    """
+    Retrieve, edit, or delete a confirmed consumption record.
+    Guarantees user scoping: users can never read, modify, or delete another user's records.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def get(self, request, pk, *args, **kwargs):
+        record = get_object_or_404(ConsumptionRecord, pk=pk, user=request.user)
+        serializer = ConsumptionRecordSerializer(record)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk, *args, **kwargs):
+        record = get_object_or_404(ConsumptionRecord, pk=pk, user=request.user)
+
+        new_servings = request.data.get("servings_consumed")
+        new_notes = request.data.get("notes")
+        new_product_name = request.data.get("product_name")
+
+        if new_servings is not None:
+            try:
+                servings_float = float(new_servings)
+                if servings_float <= 0:
+                    return Response(
+                        {"error": "Servings consumed must be greater than zero."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "Invalid servings quantity format."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Recalculate nutrient contributions with the new serving multiplier
+            old_snapshot = record.nutrients_snapshot or {}
+            updated_snapshot = {}
+            for k, item in old_snapshot.items():
+                base_val = item.get("base_amount")
+                is_missing = item.get("is_missing", False)
+                unit = item.get("unit", "")
+                if not is_missing and base_val is not None:
+                    new_amt = round(float(base_val) * servings_float, 2)
+                    updated_snapshot[k] = {
+                        **item,
+                        "amount": new_amt,
+                        "servings_multiplier": servings_float,
+                    }
+                else:
+                    updated_snapshot[k] = {
+                        **item,
+                        "amount": None,
+                        "servings_multiplier": servings_float,
+                    }
+
+            record.servings_consumed = servings_float
+            record.nutrients_snapshot = updated_snapshot
+
+        if new_notes is not None:
+            record.notes = str(new_notes).strip()
+        if new_product_name is not None and str(new_product_name).strip():
+            record.product_name = str(new_product_name).strip()
+
+        record.save()
+        serializer = ConsumptionRecordSerializer(record)
+        return Response({
+            "record": serializer.data,
+            "message": "Consumption record updated successfully.",
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk, *args, **kwargs):
+        record = get_object_or_404(ConsumptionRecord, pk=pk, user=request.user)
+        product_name = record.product_name
+        record.delete()
+        return Response({
+            "message": f"Deleted consumption record for '{product_name}'.",
+        }, status=status.HTTP_200_OK)
+
+
+class DailyIntakeSummaryView(APIView):
+    """
+    Computes daily accumulated nutritional ledger and multi-product alerts for a given local date.
+    Recalculates totals immediately from confirmed records.
+    Never coerces missing data to zero; warns when data is incomplete.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        date_str = request.query_params.get("date")
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Expected YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            target_date = timezone.localdate()
+
+        date_key = str(target_date)
+
+        records = ConsumptionRecord.objects.filter(
+            user=request.user,
+            consumption_date=target_date,
+        ).order_by("-consumption_time")
+
+        records_payload = [
+            {
+                "id": r.id,
+                "product_name": r.product_name,
+                "servings_consumed": r.servings_consumed,
+                "serving_size": r.serving_size,
+                "serving_unit": r.serving_unit,
+                "basis_used": r.basis_used,
+                "consumption_time": r.consumption_time.isoformat() if r.consumption_time else None,
+                "nutrients_snapshot": r.nutrients_snapshot or {},
+            }
+            for r in records
+        ]
+
+        summary = accumulate_daily_intake(records_payload, date_key)
+        return Response(summary, status=status.HTTP_200_OK)
+
+
+class IntakeHistoryDatesView(APIView):
+    """
+    Returns dates for which the user has logged consumption, useful for historical navigation.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        records = (
+            ConsumptionRecord.objects.filter(user=request.user)
+            .values_list("consumption_date", flat=True)
+            .distinct()
+            .order_by("-consumption_date")
+        )
+        dates_list = [str(d) for d in records]
+        return Response({
+            "dates": dates_list,
+            "total_logged_days": len(dates_list),
+        }, status=status.HTTP_200_OK)
 

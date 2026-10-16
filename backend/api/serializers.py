@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework import serializers
-from .models import UserProfile
+from .models import UserProfile, ConsumptionRecord
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -96,3 +96,46 @@ class LoginSerializer(serializers.Serializer):
 
         data['user'] = user
         return data
+
+
+class ConsumptionRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConsumptionRecord
+        fields = [
+            'id',
+            'product_name',
+            'scan_id',
+            'servings_consumed',
+            'serving_size',
+            'serving_unit',
+            'basis_used',
+            'consumption_date',
+            'consumption_time',
+            'nutrients_snapshot',
+            'reference_system',
+            'notes',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'consumption_time', 'created_at', 'updated_at']
+
+
+class CreateConsumptionRecordSerializer(serializers.Serializer):
+    product_name = serializers.CharField(max_length=255, default='Scanned Food Product', trim_whitespace=True)
+    scan_id = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    servings_consumed = serializers.FloatField(required=True, min_value=0.01)
+    serving_size = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    serving_unit = serializers.CharField(max_length=50, required=False, allow_blank=True, default='serving')
+    basis_used = serializers.ChoiceField(choices=['per_serving', 'per_100g'], default='per_serving')
+    consumption_date = serializers.DateField(required=False)
+    nutrition_facts = serializers.DictField(required=False, default=dict)
+    nutrients_snapshot = serializers.DictField(required=False, default=dict)
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+    idempotency_key = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+
+    def validate_servings_consumed(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Servings consumed must be greater than zero.")
+        if value > 100:
+            raise serializers.ValidationError("Unusually large serving quantity. Please verify the amount.")
+        return value

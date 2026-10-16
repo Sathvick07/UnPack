@@ -183,3 +183,168 @@ export async function updateUserProfile(
 
   return data;
 }
+
+// --------------------------------------------------------------------------
+// Daily Intake Ledger & Nutrient Reference Limits Endpoints
+// --------------------------------------------------------------------------
+
+import {
+  ReferenceLimitsResponse,
+  DailyIntakeSummary,
+  CreateConsumptionPayload,
+  UpdateConsumptionPayload,
+} from '../types/nutrition';
+
+export async function fetchReferenceLimits(): Promise<ReferenceLimitsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/intake/reference-limits/`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch reference limits (HTTP ${response.status})`);
+  }
+
+  return response.json();
+}
+
+export async function recordConsumption(
+  payload: CreateConsumptionPayload,
+  token: string
+): Promise<{ record: any; message: string; is_duplicate: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/api/intake/records/`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || (data.errors ? JSON.stringify(data.errors) : 'Failed to record consumption.');
+    throw new Error(errorMsg);
+  }
+
+  return data;
+}
+
+export async function fetchDailyIntakeSummary(
+  date?: string,
+  token?: string
+): Promise<DailyIntakeSummary> {
+  const url = date
+    ? `${API_BASE_URL}/api/intake/summary/?date=${encodeURIComponent(date)}`
+    : `${API_BASE_URL}/api/intake/summary/`;
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Token ${token}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Failed to fetch intake summary (HTTP ${response.status})`);
+  }
+
+  return response.json();
+}
+
+export async function fetchConsumptionRecords(
+  date?: string,
+  token?: string
+): Promise<{ date: string; count: number; records: any[] }> {
+  const url = date
+    ? `${API_BASE_URL}/api/intake/records/?date=${encodeURIComponent(date)}`
+    : `${API_BASE_URL}/api/intake/records/`;
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Token ${token}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch consumption records (HTTP ${response.status})`);
+  }
+
+  return response.json();
+}
+
+export async function updateConsumptionRecord(
+  recordId: number,
+  payload: UpdateConsumptionPayload,
+  token: string
+): Promise<{ record: any; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/intake/records/${recordId}/`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Token ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to update consumption record.');
+  }
+
+  return data;
+}
+
+export async function deleteConsumptionRecord(
+  recordId: number,
+  token: string
+): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/intake/records/${recordId}/`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Token ${token}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to delete consumption record.');
+  }
+
+  return data;
+}
+
+export async function fetchIntakeHistoryDates(
+  token: string
+): Promise<{ dates: string[]; total_logged_days: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/intake/history/dates/`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Token ${token}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch intake history dates (HTTP ${response.status})`);
+  }
+
+  return response.json();
+}

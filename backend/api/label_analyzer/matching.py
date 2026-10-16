@@ -296,8 +296,8 @@ def evaluate_compatibility(
 
         # 1. Check explicit allergen statements (e.g. "CONTAINS MILK, WHEAT AND SOY")
         for stmt in allergen_statements:
-            notice_type = stmt.get("notice_type", "contains").lower()
-            stmt_text = stmt.get("source_text", "").strip()
+            notice_type = str(stmt.get("notice_type") or stmt.get("type") or "contains").lower()
+            stmt_text = str(stmt.get("source_text") or stmt.get("statement") or stmt.get("text") or "").strip()
             stmt_lower = stmt_text.lower()
             stmt_bbox = stmt.get("bounding_box")
 

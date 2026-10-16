@@ -51,7 +51,11 @@ def parse_deterministic_label(text: str, quality_tier: str) -> Dict[str, Any]:
         })
 
     # 2. Parse Ingredients List
-    ing_match = re.search(r"ingredients?:\s*([^\n\r]+(?:\n[^\n\r]+)*?)(?=\n\n|contains:?|may contain:?|nutrition facts|nutritional information|allergens?:?|$)", text, re.IGNORECASE)
+    ing_match = re.search(
+        r"ingredients?:\s*([^\n\r]+(?:\n[^\n\r]+)*?)(?=\n\n|\n\s*(?:contains|may contain|allergens?|nutrition facts|nutritional information):?|contains:?|may contain:?|nutrition facts|nutritional information|allergens?:?|$)",
+        text,
+        re.IGNORECASE
+    )
     if ing_match:
         raw_ing_block = ing_match.group(1).strip()
         raw_items = re.split(r",\s*(?![^()]*\))", raw_ing_block)
@@ -390,13 +394,24 @@ def analyze_label_image(
     allergen_statements: List[Dict[str, Any]] = []
     for item in raw_allergens:
         if isinstance(item, str):
+            n_type = "contains" if "contain" in item.lower() else "precautionary"
             allergen_statements.append({
-                "notice_type": "contains" if "contain" in item.lower() else "precautionary",
+                "notice_type": n_type,
+                "type": n_type,
                 "source_text": item,
+                "statement": item,
                 "bounding_box": [0.0, 0.0, 0.0, 0.0]
             })
         elif isinstance(item, dict):
-            allergen_statements.append(item)
+            src_text = str(item.get("source_text") or item.get("statement") or item.get("text") or "").strip()
+            n_type = str(item.get("notice_type") or item.get("type") or ("contains" if "contain" in src_text.lower() else "precautionary")).lower()
+            allergen_statements.append({
+                "notice_type": n_type,
+                "type": n_type,
+                "source_text": src_text,
+                "statement": src_text,
+                "bounding_box": item.get("bounding_box", [0.0, 0.0, 0.0, 0.0])
+            })
 
     raw_nutrition = parsed_data.get("nutrition_facts", {})
     normalized_nutrition: Dict[str, Any] = {}
@@ -454,7 +469,7 @@ def analyze_label_image(
 
 
     # Step 3: Validate completeness and flags
-    completeness = validate_extraction_completeness(raw_text, ingredients, nutrition_facts, quality_tier)
+    completeness = validate_extraction_completeness(raw_text, ingredients, nutrition_facts, quality_tier, allergen_statements=allergen_statements)
     uncertainty_flags = quality["warnings"] + completeness["uncertainty_flags"]
 
     if gemini_notice and not parsed_data.get("ingredients"):

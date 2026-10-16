@@ -37,3 +37,33 @@ class UserProfile(models.Model):
 def ensure_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.get_or_create(user=instance)
+
+
+class ConsumptionRecord(models.Model):
+    """
+    Confirmed food consumption ledger entry.
+    Preserves exact portion calculations, date of intake, and calculated nutrient snapshots.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='consumption_records')
+    product_name = models.CharField(max_length=255, default='Scanned Food Product')
+    scan_id = models.CharField(max_length=100, blank=True, default='')
+    servings_consumed = models.FloatField(default=1.0)
+    serving_size = models.CharField(max_length=100, blank=True, default='')
+    serving_unit = models.CharField(max_length=50, blank=True, default='serving')
+    basis_used = models.CharField(max_length=50, default='per_serving')  # 'per_serving' or 'per_100g'
+    consumption_date = models.DateField(db_index=True)  # User's local calendar date YYYY-MM-DD
+    consumption_time = models.DateTimeField(auto_now_add=True)
+    nutrients_snapshot = models.JSONField(default=dict)  # Calculated nutrient contributions for this portion
+    reference_system = models.CharField(max_length=100, default='FSSAI_ICMR_2020')
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-consumption_time']
+        indexes = [
+            models.Index(fields=['user', 'consumption_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.product_name} ({self.servings_consumed} servings on {self.consumption_date})"

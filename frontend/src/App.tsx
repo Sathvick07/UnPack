@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { checkBackendHealth } from './api/client';
 import { ConnectionState } from './types/api';
 import { AppPage } from './types/navigation';
+import { LabelAnalysisReport } from './types/label';
 import { ThemeProvider } from './context/ThemeContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
+import { LogoutConfirmationModal } from './components/LogoutConfirmationModal';
 import { HomePage } from './pages/HomePage';
 import { ScanPage } from './pages/ScanPage';
 import { NutritionPage } from './pages/NutritionPage';
@@ -17,6 +19,10 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState<AppPage>('home');
   const [connectionState, setConnectionState] = useState<ConnectionState>('checking');
   const [latency, setLatency] = useState<number | null>(null);
+  const [pendingReport, setPendingReport] = useState<LabelAnalysisReport | null>(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
+
+  const { logout, token } = useAuth();
 
   const probeBackend = useCallback(async () => {
     setConnectionState('checking');
@@ -41,6 +47,21 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleRequestLogout = () => {
+    if (pendingReport) {
+      setIsLogoutModalOpen(true);
+    } else {
+      executeLogout();
+    }
+  };
+
+  const executeLogout = async () => {
+    await logout();
+    setPendingReport(null);
+    setIsLogoutModalOpen(false);
+    handleNavigate('home');
+  };
+
   return (
     <div className="app-layout">
       <Navbar
@@ -49,11 +70,18 @@ function AppContent() {
         connectionState={connectionState}
         latency={latency}
         onRefreshHealth={probeBackend}
+        onRequestLogout={handleRequestLogout}
       />
 
       <main className="main-content">
         {currentPage === 'home' && <HomePage onNavigate={handleNavigate} />}
-        {currentPage === 'scan' && <ScanPage onNavigate={handleNavigate} />}
+        {currentPage === 'scan' && (
+          <ScanPage
+            onNavigate={handleNavigate}
+            onScanCompleted={(rep) => setPendingReport(rep)}
+            onClearPendingScan={() => setPendingReport(null)}
+          />
+        )}
         {currentPage === 'nutrition' && <NutritionPage onNavigate={handleNavigate} />}
         {currentPage === 'login' && <LoginPage onNavigate={handleNavigate} />}
         {currentPage === 'register' && <RegisterPage onNavigate={handleNavigate} />}
@@ -61,6 +89,17 @@ function AppContent() {
       </main>
 
       <Footer onNavigate={handleNavigate} />
+
+      {pendingReport && (
+        <LogoutConfirmationModal
+          pendingReport={pendingReport}
+          token={token}
+          isOpen={isLogoutModalOpen}
+          onCancel={() => setIsLogoutModalOpen(false)}
+          onDiscardAndLogout={executeLogout}
+          onSavedAndLogout={executeLogout}
+        />
+      )}
     </div>
   );
 }
