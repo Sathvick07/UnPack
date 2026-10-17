@@ -17,6 +17,7 @@ from .views import (
 
 urlpatterns = [
     path('health/', HealthCheckView.as_view(), name='health-check'),
+    path('health', HealthCheckView.as_view(), name='health-check-noslash'),
     path('analyze-label/', AnalyzeLabelView.as_view(), name='analyze-label'),
     path('verify-fields/', VerifyFieldsView.as_view(), name='verify-fields'),
     # Authentication endpoints

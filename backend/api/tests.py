@@ -1605,6 +1605,127 @@ class ConsumptionIntakeLedgerTests(APITestCase):
         self.assertIn("2026-10-16", dates_data)
         self.assertIn("2026-10-17", dates_data)
 
+    def test_consumption_recording_with_explicit_local_calendar_date(self):
+        """
+        Regression test: Explicit local calendar date passed from frontend (e.g. 2026-10-17)
+        must persist correctly and immediately appear in the daily summary for that date.
+        """
+        payload = {
+            "product_name": "Greek Yogurt Bowl",
+            "servings_consumed": 1.0,
+            "consumption_date": "2026-10-17",
+            "basis_used": "per_serving",
+            "nutrition_facts": {
+                "energy": {"value": 180.0, "unit": "kcal", "serving_value": 180.0},
+                "protein": {"value": 15.0, "unit": "g", "serving_value": 15.0},
+                "sodium": {"value": 65.0, "unit": "mg", "serving_value": 65.0},
+            }
+        }
+        resp = self.client.post(self.records_url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.json()["record"]["consumption_date"], "2026-10-17")
+
+        # Query summary for 2026-10-17
+        summary_resp = self.client.get(f"{self.summary_url}?date=2026-10-17")
+        self.assertEqual(summary_resp.status_code, status.HTTP_200_OK)
+        data = summary_resp.json()
+        self.assertEqual(data["total_products_confirmed"], 1)
+        self.assertEqual(data["nutrient_totals"]["energy"]["amount"], 180.0)
+        self.assertEqual(data["nutrient_totals"]["protein"]["amount"], 15.0)
+        self.assertEqual(data["nutrient_totals"]["sodium"]["amount"], 65.0)
+
+    def test_nutrient_multiplier_with_fractional_and_missing_data(self):
+        """
+        Regression test: Servings multiplier correctly scales available nutrients,
+        explicit zero remains 0.0, and missing data is NEVER converted to zero.
+        """
+        payload = {
+            "product_name": "Multi-Serving Snack",
+            "servings_consumed": 2.5,
+            "consumption_date": "2026-10-17",
+            "basis_used": "per_serving",
+            "nutrition_facts": {
+                "energy": {"value": 100.0, "unit": "kcal", "serving_value": 100.0},
+                "sodium": {"value": 200.0, "unit": "mg", "serving_value": 200.0},
+                "trans_fat": {"value": 0.0, "unit": "g", "serving_value": 0.0},
+                "added_sugars": {"value": None, "unit": "g", "status": "not_provided"},
+            }
+        }
+        resp = self.client.post(self.records_url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        snapshot = resp.json()["record"]["nutrients_snapshot"]
+        self.assertEqual(snapshot["energy"]["amount"], 250.0)  # 100 * 2.5
+        self.assertEqual(snapshot["sodium"]["amount"], 500.0)  # 200 * 2.5
+        self.assertEqual(snapshot["trans_fat"]["amount"], 0.0)  # 0 * 2.5 is 0.0
+        self.assertTrue(snapshot["trans_fat"]["is_zero_explicit"])
+        self.assertIsNone(snapshot["added_sugars"]["amount"])  # None remains None
+        self.assertTrue(snapshot["added_sugars"]["is_missing"])
+
+        # Daily summary also keeps missing data as None, not zero
+        summary_resp = self.client.get(f"{self.summary_url}?date=2026-10-17")
+        self.assertEqual(summary_resp.status_code, status.HTTP_200_OK)
+        data = summary_resp.json()
+        self.assertIsNone(data["nutrient_totals"]["added_sugars"]["amount"])
+        self.assertIn("added_sugars", data["incomplete_nutrients"])
+
+    def test_duplicate_prevention_same_key_deduplicated_different_keys_allowed(self):
+        """
+        Regression test: Submitting with identical idempotency_key is deduplicated (idempotent),
+        but subsequent submissions for the same product with unique keys succeed as separate records.
+        """
+        from .models import ConsumptionRecord
+
+        key = "idemp-session-txn-12345"
+        payload1 = {
+            "product_name": "Almond Butter",
+            "servings_consumed": 1.0,
+            "consumption_date": "2026-10-17",
+            "idempotency_key": key,
+            "nutrition_facts": {"protein": {"value": 7.0, "unit": "g"}}
+        }
+        # First submission
+        r1 = self.client.post(self.records_url, payload1, format="json")
+        self.assertEqual(r1.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(r1.json()["is_duplicate"])
+
+        # Duplicate retry with same idempotency key
+        r2 = self.client.post(self.records_url, payload1, format="json")
+        self.assertEqual(r2.status_code, status.HTTP_200_OK)
+        self.assertTrue(r2.json()["is_duplicate"])
+        self.assertEqual(ConsumptionRecord.objects.filter(user=self.user, scan_id=key).count(), 1)
+
+        # Logging another portion later with a new unique key must succeed
+        payload2 = {
+            "product_name": "Almond Butter",
+            "servings_consumed": 1.0,
+            "consumption_date": "2026-10-17",
+            "idempotency_key": "idemp-session-txn-67890",
+            "nutrition_facts": {"protein": {"value": 7.0, "unit": "g"}}
+        }
+        r3 = self.client.post(self.records_url, payload2, format="json")
+        self.assertEqual(r3.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(r3.json()["is_duplicate"])
+
+        # Summary now reflects 2 confirmed portions (total 14.0g protein)
+        summary_resp = self.client.get(f"{self.summary_url}?date=2026-10-17")
+        self.assertEqual(summary_resp.json()["total_products_confirmed"], 2)
+        self.assertEqual(summary_resp.json()["nutrient_totals"]["protein"]["amount"], 14.0)
+
+    def test_unauthenticated_requests_are_rejected(self):
+        """
+        Regression test: Unauthenticated access to intake records and summary returns 401.
+        """
+        unauth_client = APIClient()
+        r1 = unauth_client.get(self.records_url)
+        self.assertEqual(r1.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        r2 = unauth_client.post(self.records_url, {"product_name": "Test"}, format="json")
+        self.assertEqual(r2.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        r3 = unauth_client.get(self.summary_url)
+        self.assertEqual(r3.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
 
 

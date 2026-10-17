@@ -7,6 +7,8 @@ import {
   updateConsumptionRecord,
   deleteConsumptionRecord,
 } from '../api/client';
+import { getLocalDateString, formatDisplayDate, shiftLocalDate } from '../utils/date';
+import { StatusAlert } from '../components/StatusAlert';
 
 interface NutritionPageProps {
   onNavigate: (page: AppPage) => void;
@@ -14,13 +16,6 @@ interface NutritionPageProps {
 
 export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
   const { token, isAuthenticated } = useAuth();
-
-  const getLocalDateString = (d: Date = new Date()) => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   const todayStr = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
@@ -44,49 +39,48 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
       const data = await fetchDailyIntakeSummary(dateToLoad, token || undefined);
       setSummary(data);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to load daily intake summary.');
+      setErrorMessage(err.message || 'Failed to load daily intake summary. Please check your network connection.');
     } finally {
       setIsLoading(false);
     }
   }, [token]);
 
+  // Load summary on selectedDate or token change
   useEffect(() => {
     loadSummary(selectedDate);
   }, [selectedDate, loadSummary]);
 
+  // Reactive listener: automatically synchronize if a consumption event is recorded elsewhere
+  useEffect(() => {
+    const handleConsumptionRecorded = (e: Event) => {
+      const customEvent = e as CustomEvent<{ date?: string }>;
+      if (customEvent.detail?.date) {
+        setSelectedDate(customEvent.detail.date);
+        loadSummary(customEvent.detail.date);
+      } else {
+        loadSummary(selectedDate);
+      }
+    };
+
+    window.addEventListener('unpack:consumption-recorded', handleConsumptionRecorded);
+    return () => {
+      window.removeEventListener('unpack:consumption-recorded', handleConsumptionRecorded);
+    };
+  }, [loadSummary, selectedDate]);
+
   const handlePrevDay = () => {
-    const [y, m, d] = selectedDate.split('-').map(Number);
-    const dateObj = new Date(y, m - 1, d);
-    dateObj.setDate(dateObj.getDate() - 1);
-    setSelectedDate(getLocalDateString(dateObj));
+    setSelectedDate((curr) => shiftLocalDate(curr, -1));
   };
 
   const handleNextDay = () => {
-    const [y, m, d] = selectedDate.split('-').map(Number);
-    const dateObj = new Date(y, m - 1, d);
-    dateObj.setDate(dateObj.getDate() + 1);
-    setSelectedDate(getLocalDateString(dateObj));
+    setSelectedDate((curr) => shiftLocalDate(curr, 1));
   };
 
   const handleToday = () => {
     setSelectedDate(todayStr);
   };
 
-  const formattedDisplayDate = (() => {
-    try {
-      const [y, m, d] = selectedDate.split('-').map(Number);
-      const dateObj = new Date(y, m - 1, d);
-      return new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      }).format(dateObj);
-    } catch {
-      return selectedDate;
-    }
-  })();
-
+  const formattedDisplayDate = formatDisplayDate(selectedDate);
   const isToday = selectedDate === todayStr;
 
   const handleSaveEditPortion = async (item: ConfirmedIntakeItem) => {
@@ -126,18 +120,18 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
       <div className="page-content nutrition-page">
         <div className="page-header">
           <div className="brand-badge">Nutrition & Intake Ledger</div>
-          <h1 className="page-title">Daily Confirmed Intake</h1>
+          <h1 className="page-title">Daily Intake & Reference Limits</h1>
           <p className="page-subtitle">
             Accurate nutritional accumulation calculated strictly from foods you explicitly confirm consuming.
           </p>
         </div>
 
         <div className="empty-state-card" style={{ maxWidth: '600px', margin: '2rem auto' }}>
-          <div className="empty-state-icon">🔒</div>
+          <div className="empty-state-icon" aria-hidden="true">🔒</div>
           <h3 className="empty-state-title">Sign In to Track Daily Intake</h3>
           <p className="empty-state-text">
-            Confirmed nutritional tracking requires a secure account so your daily ledger, reference percentages,
-            and multi-product alerts persist across your devices.
+            Confirmed nutritional tracking requires an account so your daily ledger, reference percentages,
+            and multi-product alerts persist securely across your devices.
           </p>
           <div className="empty-state-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
             <button
@@ -165,8 +159,17 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
   const items = summary?.items || [];
   const hasIncomplete = summary?.has_incomplete_data || false;
 
-  // Key Spotlight Nutrients
-  const keyNutrientKeys = ['energy', 'sodium', 'protein', 'added_sugars', 'saturated_fat', 'dietary_fibre'];
+  // Key spotlight nutrients
+  const keyNutrientKeys = [
+    'energy',
+    'sodium',
+    'protein',
+    'added_sugars',
+    'saturated_fat',
+    'total_fat',
+    'carbohydrates',
+    'dietary_fibre',
+  ];
 
   return (
     <div className="page-content nutrition-page">
@@ -178,7 +181,7 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
         </p>
       </div>
 
-      {/* Date Navigation Strip */}
+      {/* Date Navigation & Status Bar */}
       <div
         className="date-strip"
         style={{
@@ -187,9 +190,14 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '0.75rem',
+          background: 'var(--bg-card)',
+          padding: '0.85rem 1.25rem',
+          borderRadius: '12px',
+          border: '1px solid var(--border-subtle)',
+          marginBottom: '1.5rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -201,8 +209,10 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
           </button>
 
           <div className="date-display" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span className="calendar-icon">📅</span>
-            <span className="date-text" style={{ fontWeight: 700 }}>{formattedDisplayDate}</span>
+            <span className="calendar-icon" aria-hidden="true">📅</span>
+            <span className="date-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+              {formattedDisplayDate}
+            </span>
           </div>
 
           <button
@@ -236,65 +246,64 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
           />
         </div>
 
-        <div className="ledger-rule-badge">
-          <span>Rule: Preview ≠ Consumption</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span className="status-pill pill-neutral" style={{ fontSize: '0.78rem' }}>
+            Rule: Preview ≠ Consumption
+          </span>
+          <span className="badge-pill">
+            {items.length} {items.length === 1 ? 'Food' : 'Foods'} Logged
+          </span>
         </div>
       </div>
 
+      {/* Action Success Alert */}
       {actionSuccessMsg && (
-        <div
-          style={{
-            background: 'rgba(132, 204, 22, 0.12)',
-            border: '1px solid rgba(132, 204, 22, 0.4)',
-            borderRadius: '8px',
-            padding: '0.75rem 1rem',
-            margin: '1rem 0',
-            color: 'var(--color-lime)',
-            fontSize: '0.88rem',
-            fontWeight: 600,
-          }}
-        >
-          ✓ {actionSuccessMsg}
-        </div>
+        <StatusAlert
+          type="success"
+          title="Intake Ledger Updated"
+          message={actionSuccessMsg}
+          onDismiss={() => setActionSuccessMsg(null)}
+        />
       )}
 
+      {/* Error Alert */}
       {errorMessage && (
-        <div
-          style={{
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            borderRadius: '8px',
-            padding: '0.75rem 1rem',
-            margin: '1rem 0',
-            color: '#f87171',
-            fontSize: '0.88rem',
-          }}
-        >
-          ⚠️ {errorMessage}
-        </div>
+        <StatusAlert
+          type="error"
+          title="Failed to Load Daily Summary"
+          message={errorMessage}
+          onRetry={() => loadSummary(selectedDate)}
+          retryLabel="Retry"
+          onDismiss={() => setErrorMessage(null)}
+        />
       )}
 
+      {/* Loading Indicator */}
       {isLoading && (
         <div
           style={{
             textAlign: 'center',
-            padding: '2rem 1rem',
+            padding: '2.5rem 1rem',
             color: 'var(--text-muted)',
             fontSize: '0.92rem',
+            background: 'var(--bg-card)',
+            borderRadius: '12px',
+            border: '1px solid var(--border-subtle)',
+            marginBottom: '1.5rem',
           }}
         >
-          <div style={{ fontSize: '1.6rem', marginBottom: '0.5rem' }}>⏳</div>
-          <div>Loading confirmed intake records for {formattedDisplayDate}...</div>
+          <div style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }} aria-hidden="true">⏳</div>
+          <div>Loading confirmed intake records for <strong>{formattedDisplayDate}</strong>...</div>
         </div>
       )}
 
       {/* Multi-Product Alerts Banner */}
-      {alerts.length > 0 && (
+      {!isLoading && alerts.length > 0 && (
         <div style={{ margin: '1.5rem 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>🚨</span>
+            <span style={{ fontSize: '1.3rem' }} aria-hidden="true">🚨</span>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#f87171' }}>
-              Daily Nutrient Intake Alerts ({alerts.length})
+              Daily Reference Intake Alerts ({alerts.length})
             </h3>
           </div>
 
@@ -330,7 +339,7 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                   </span>
                 </div>
 
-                {/* Visual Progress Bar */}
+                {/* Progress Bar */}
                 <div
                   style={{
                     height: '8px',
@@ -365,33 +374,31 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* Incomplete Data Callout */}
-      {hasIncomplete && (
-        <div
-          style={{
-            background: 'rgba(234, 179, 8, 0.1)',
-            border: '1px solid rgba(234, 179, 8, 0.35)',
-            borderRadius: '8px',
-            padding: '0.75rem 1rem',
-            margin: '1rem 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
-          }}
-        >
-          <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            <strong>Notice: Incomplete Product Label Data.</strong> Some foods consumed today omitted certain nutrition facts.
-            Total accumulation for those nutrients may be partial rather than zero.
-          </div>
+      {/* Incomplete Data Notice */}
+      {!isLoading && hasIncomplete && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <StatusAlert
+            type="warning"
+            title="Incomplete Product Nutrition Data"
+            message="Some foods confirmed consumed today omitted certain nutrition facts on their packaging. Totals for those nutrients reflect available data rather than zero."
+            evidenceNote="Absence of a declared nutrient value on a label is preserved as 'Not provided' and never fabricated into 0."
+          />
         </div>
       )}
 
-      {/* Key Macronutrient Cards */}
-      <div style={{ marginBottom: '1rem' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-          Key Daily Reference Benchmarks
-        </h3>
+      {/* Section 1: Key Daily Reference Benchmarks Card Grid */}
+      <div style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+              Key Daily Reference Benchmarks
+            </h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Benchmarks based on FSSAI 2020 / ICMR 2020 adult guidelines (2,000 kcal diet). General educational references only.
+            </span>
+          </div>
+        </div>
+
         <div className="metrics-grid">
           {keyNutrientKeys.map((k) => {
             const item: NutrientTotalItem | undefined = nutrients[k];
@@ -400,6 +407,21 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
             const isMissing = item.amount === null;
             const pct = item.percentage;
             const ref = item.reference;
+            const refAmt = ref?.daily_reference_amount;
+            const consumedAmt = item.amount;
+            const hasAmount = !isMissing && consumedAmt !== null;
+            const hasRef = refAmt !== null && refAmt !== undefined;
+
+            // Calculate remaining amount strictly when both consumed and reference exist
+            let remainingLabel = '—';
+            if (hasAmount && hasRef && consumedAmt !== null && refAmt !== null && refAmt !== undefined) {
+              const diff = refAmt - consumedAmt;
+              if (diff >= 0) {
+                remainingLabel = `${diff.toFixed(diff >= 10 ? 0 : 1)} ${item.unit} remaining`;
+              } else {
+                remainingLabel = `Exceeded by ${Math.abs(diff).toFixed(diff <= -10 ? 0 : 1)} ${item.unit}`;
+              }
+            }
 
             return (
               <div key={k} className="metric-card">
@@ -409,16 +431,21 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                 </div>
 
                 <div className="metric-value">
-                  {isMissing ? (
-                    <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>Unavailable</span>
+                  {isMissing || consumedAmt === null ? (
+                    <span style={{ fontSize: '1.05rem', color: 'var(--text-muted)' }}>Unavailable</span>
                   ) : (
-                    item.amount
+                    <span>
+                      {consumedAmt.toFixed(consumedAmt >= 10 ? 0 : 1)}{' '}
+                      <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                        {item.unit}
+                      </span>
+                    </span>
                   )}
                 </div>
 
                 {/* Progress bar if percentage available */}
-                {pct !== null && (
-                  <div style={{ margin: '0.4rem 0' }}>
+                {pct !== null ? (
+                  <div style={{ margin: '0.5rem 0' }}>
                     <div
                       style={{
                         height: '6px',
@@ -432,32 +459,30 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                         style={{
                           height: '100%',
                           width: `${Math.min(pct, 100)}%`,
-                          background: pct >= 100 ? '#ef4444' : pct >= 80 ? '#f97316' : 'var(--brand-primary)',
+                          background: pct >= 100 ? '#ef4444' : pct >= 80 ? '#f97316' : 'var(--color-lime)',
                           borderRadius: '3px',
+                          transition: 'width 0.3s ease',
                         }}
+                        role="progressbar"
+                        aria-valuenow={Math.round(pct)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
                       />
                     </div>
                   </div>
+                ) : (
+                  <div style={{ height: '6px', margin: '0.5rem 0' }} />
                 )}
 
                 <div className="metric-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className="metric-target">
-                    {pct !== null
-                      ? `${pct}% of ${ref?.daily_reference_amount} ${item.unit}`
-                      : item.percentage_message}
+                    {pct !== null && hasRef && ref
+                      ? `${pct}% of ${ref.daily_reference_amount} ${item.unit}`
+                      : item.percentage_message || 'Reference unconfigured'}
                   </span>
-                  {item.is_incomplete && (
-                    <span
-                      style={{
-                        fontSize: '0.7rem',
-                        color: '#eab308',
-                        background: 'rgba(234, 179, 8, 0.15)',
-                        padding: '0.1rem 0.4rem',
-                        borderRadius: '4px',
-                      }}
-                      title="Some products lacked this nutrient"
-                    >
-                      Partial
+                  {hasAmount && hasRef && (
+                    <span style={{ fontSize: '0.75rem', color: pct !== null && pct > 100 ? '#f87171' : 'var(--text-secondary)' }}>
+                      {remainingLabel}
                     </span>
                   )}
                 </div>
@@ -467,15 +492,15 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Confirmed Food Items List for this Date */}
+      {/* Section 2: Confirmed Food Items List for this Date */}
       <div style={{ margin: '2rem 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
               Confirmed Foods Consumed ({items.length})
             </h3>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Items explicitly confirmed by you on {formattedDisplayDate}.
+              Foods explicitly confirmed by you on {formattedDisplayDate}.
             </span>
           </div>
 
@@ -490,12 +515,11 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
 
         {items.length === 0 ? (
           <div className="empty-state-card">
-            <div className="empty-state-icon">🥗</div>
+            <div className="empty-state-icon" aria-hidden="true">🥗</div>
             <h3 className="empty-state-title">No Confirmed Food Items on {formattedDisplayDate}</h3>
             <p className="empty-state-text">
               Unpack never fabricates consumption history or invents placeholder meals.
-              To add an item to your daily ledger, scan a label, preview the nutrient contribution
-              for your portion, and tap <strong>Record Consumption</strong>.
+              To record what you eat or drink, scan a label, inspect the nutrient contribution, and tap <strong>Record Consumption</strong>.
             </p>
             <div className="empty-state-actions">
               <button
@@ -611,26 +635,26 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                   {/* Delete Confirmation Box */}
                   {isConfirmingDelete && (
                     <div
+                      className="confirm-prompt-box prompt-danger"
                       style={{
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        background: 'var(--status-error-bg)',
+                        border: '1px solid var(--status-error-border)',
                         padding: '0.75rem 1rem',
                         borderRadius: '8px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         flexWrap: 'wrap',
-                        gap: '0.5rem',
+                        gap: '0.65rem',
                       }}
                     >
-                      <span style={{ fontSize: '0.86rem', color: '#f87171' }}>
-                        Are you sure you want to remove <strong>"{item.product_name}"</strong> from today's ledger?
+                      <span style={{ fontSize: '0.86rem', color: 'var(--status-error-text)' }}>
+                        Remove <strong>"{item.product_name}"</strong> from today's ledger?
                       </span>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button
                           type="button"
-                          className="btn btn-sm"
-                          style={{ background: '#ef4444', color: '#fff' }}
+                          className="btn btn-danger btn-sm"
                           onClick={() => handleDeleteItem(item)}
                           disabled={isUpdating}
                         >
@@ -648,7 +672,7 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                     </div>
                   )}
 
-                  {/* Item Nutrient Pills */}
+                  {/* Item Nutrient Contribution Pills */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.2rem' }}>
                     {Object.entries(item.nutrients).map(([k, n]) => {
                       if (n.is_missing || n.amount === null) return null;
@@ -676,9 +700,9 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
         )}
       </div>
 
-      {/* Comprehensive 15-Nutrient Reference Table */}
+      {/* Section 3: Comprehensive Nutrient Accumulation Table */}
       <div style={{ margin: '2rem 0' }}>
-        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
           Detailed Daily Accumulation & Reference Limits
         </h3>
         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
@@ -690,16 +714,31 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
             <thead>
               <tr>
                 <th style={{ width: '28%' }}>Nutrient</th>
-                <th style={{ width: '20%', textAlign: 'right' }}>Confirmed Intake</th>
-                <th style={{ width: '22%', textAlign: 'right' }}>Daily Reference</th>
-                <th style={{ width: '18%', textAlign: 'right' }}>% Reference</th>
-                <th style={{ width: '12%', textAlign: 'center' }}>Data Quality</th>
+                <th style={{ width: '18%', textAlign: 'right' }}>Confirmed Intake</th>
+                <th style={{ width: '20%', textAlign: 'right' }}>Daily Reference</th>
+                <th style={{ width: '16%', textAlign: 'right' }}>% Reference</th>
+                <th style={{ width: '18%', textAlign: 'right' }}>Remaining</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(nutrients).map(([k, item]: [string, NutrientTotalItem], idx) => {
                 const isMissing = item.amount === null;
                 const rowClass = idx % 2 === 0 ? 'row-even' : 'row-odd';
+                const ref = item.reference;
+                const refAmt = ref?.daily_reference_amount;
+                const consumedAmt = item.amount;
+                const hasAmount = !isMissing && consumedAmt !== null;
+                const hasRef = refAmt !== null && refAmt !== undefined;
+
+                let remainingText = '—';
+                if (hasAmount && hasRef && consumedAmt !== null && refAmt !== null && refAmt !== undefined) {
+                  const diff = refAmt - consumedAmt;
+                  if (diff >= 0) {
+                    remainingText = `${diff.toFixed(diff >= 10 ? 0 : 1)} ${item.unit}`;
+                  } else {
+                    remainingText = `+${Math.abs(diff).toFixed(diff <= -10 ? 0 : 1)} ${item.unit} (Exceeded)`;
+                  }
+                }
 
                 return (
                   <tr key={k} className={rowClass}>
@@ -708,19 +747,19 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                     </td>
 
                     <td className="cell-value" style={{ textAlign: 'right' }}>
-                      {isMissing ? (
+                      {isMissing || consumedAmt === null ? (
                         <span className="badge-missing">Amount unavailable</span>
                       ) : (
                         <span className="val-text">
-                          <strong>{item.amount}</strong> <span className="unit-text">{item.unit}</span>
+                          <strong>{consumedAmt}</strong> <span className="unit-text">{item.unit}</span>
                         </span>
                       )}
                     </td>
 
                     <td style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-                      {item.reference?.daily_reference_amount !== null && item.reference?.daily_reference_amount !== undefined ? (
+                      {hasRef && ref ? (
                         <span>
-                          {item.reference.daily_reference_amount} {item.reference.unit}
+                          {ref.daily_reference_amount} {ref.unit}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>Daily reference not configured</span>
@@ -732,7 +771,7 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                         <span
                           style={{
                             fontWeight: 700,
-                            color: item.percentage >= 100 ? '#ef4444' : item.percentage >= 80 ? '#f97316' : 'var(--brand-primary)',
+                            color: item.percentage >= 100 ? '#ef4444' : item.percentage >= 80 ? '#f97316' : 'var(--color-lime)',
                           }}
                         >
                           {item.percentage}%
@@ -748,35 +787,10 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
                       )}
                     </td>
 
-                    <td style={{ textAlign: 'center' }}>
-                      {item.is_incomplete ? (
-                        <span
-                          style={{
-                            fontSize: '0.75rem',
-                            color: '#eab308',
-                            background: 'rgba(234, 179, 8, 0.15)',
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: '10px',
-                            fontWeight: 600,
-                          }}
-                          title={`Missing from: ${item.missing_products.join(', ')}`}
-                        >
-                          Partial
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--color-lime)',
-                            background: 'var(--color-lime-bg)',
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: '10px',
-                            fontWeight: 600,
-                          }}
-                        >
-                          Complete
-                        </span>
-                      )}
+                    <td style={{ textAlign: 'right', fontSize: '0.85rem' }}>
+                      <span style={{ color: hasAmount && hasRef && item.percentage && item.percentage > 100 ? '#ef4444' : 'var(--text-secondary)' }}>
+                        {remainingText}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -792,15 +806,15 @@ export const NutritionPage: React.FC<NutritionPageProps> = ({ onNavigate }) => {
         <div className="info-box-grid">
           <div className="info-box-item">
             <strong>1. Explicit Confirmation Only</strong>
-            <p>Scanning or previewing a label does not alter your intake history. You must deliberately confirm consumption.</p>
+            <p>Scanning or previewing a label never alters your intake history. You must deliberately confirm consumption.</p>
           </div>
           <div className="info-box-item">
-            <strong>2. Basis & Unit Preservation</strong>
+            <strong>2. Basis & Serving Calculations</strong>
             <p>Nutrients are calculated per serving or per 100g strictly based on what the manufacturer label states and your confirmed portions.</p>
           </div>
           <div className="info-box-item">
             <strong>3. Missing Data ≠ Zero</strong>
-            <p>If a label omits a nutrient fact (e.g. trans fat or added sugars), it is recorded as missing or unreported, never coerced into zero.</p>
+            <p>If a label omits a nutrient fact, it is recorded as missing or unreported, never coerced into zero.</p>
           </div>
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>

@@ -6,14 +6,39 @@ interface LimitationsModalProps {
 }
 
 export const LimitationsModal: React.FC<LimitationsModalProps> = ({ isOpen, onClose }) => {
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card">
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="limitations-modal-title"
+      >
         <div className="modal-header">
-          <h3 className="modal-title">System Capabilities & Limitations</h3>
-          <button type="button" className="modal-close-btn" onClick={onClose}>
+          <h3 id="limitations-modal-title" className="modal-title">System Capabilities & Limitations</h3>
+          <button
+            type="button"
+            className="btn-modal-close modal-close-btn"
+            onClick={onClose}
+            aria-label="Close dialog"
+          >
             ✕
           </button>
         </div>

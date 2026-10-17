@@ -9,21 +9,70 @@ import {
   UserProfile,
 } from '../types/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+function getInitialApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl) {
+    // If running in browser and visiting 127.0.0.1, align localhost env URL with 127.0.0.1 to prevent Windows IPv6 connection rejection
+    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && envUrl.includes('localhost:8000')) {
+      return envUrl.replace('localhost:8000', '127.0.0.1:8000');
+    }
+    return envUrl;
+  }
+  // Default to 127.0.0.1:8000 for reliable IPv4 binding on Windows
+  return 'http://127.0.0.1:8000';
+}
+
+let API_BASE_URL = getInitialApiBaseUrl();
+
+export function getActiveApiBaseUrl(): string {
+  return API_BASE_URL;
+}
 
 export async function checkBackendHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/health/`, {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-    },
-  });
+  const candidateHosts = [
+    API_BASE_URL,
+    'http://127.0.0.1:8000',
+    'http://localhost:8000',
+  ];
+  // Deduplicate candidate host list
+  const uniqueHosts = Array.from(new Set(candidateHosts.map((h) => h.replace(/\/+$/, ''))));
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  let lastError: Error | null = null;
+
+  for (const host of uniqueHosts) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    try {
+      const response = await fetch(`${host}/api/health/`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        // Dynamically lock in the verified working backend host for subsequent API calls
+        API_BASE_URL = host;
+        return data as HealthResponse;
+      } else {
+        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        lastError = new Error(`Health check request to ${host} timed out after 3500ms`);
+      } else {
+        lastError = err;
+      }
+    }
   }
 
-  return response.json();
+  throw lastError || new Error('Backend health check failed: server unreachable');
 }
 
 export async function analyzeLabel(

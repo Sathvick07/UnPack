@@ -23,8 +23,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       return 'dark';
     }
-    // 3. Default to light theme as specified in the brand palette
-    return 'light';
+    // 3. Default to dark forest-green theme as specified in the brand palette
+    return 'dark';
   });
 
   const applyTheme = (newTheme: Theme) => {

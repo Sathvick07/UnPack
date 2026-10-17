@@ -3,6 +3,8 @@ import { LabelAnalysisReport, NutritionFact } from '../types/label';
 import { CreateConsumptionPayload } from '../types/nutrition';
 import { useAuth } from '../context/AuthContext';
 import { recordConsumption } from '../api/client';
+import { getLocalDateString } from '../utils/date';
+import { StatusAlert } from './StatusAlert';
 
 interface RecordConsumptionModalProps {
   report: LabelAnalysisReport;
@@ -33,12 +35,19 @@ export const RecordConsumptionModal: React.FC<RecordConsumptionModalProps> = ({
   const [basisUsed, setBasisUsed] = useState<'per_serving' | 'per_100g'>('per_serving');
   const [servingSize, setServingSize] = useState<string>('1 serving');
   const [servingUnit, setServingUnit] = useState<string>('serving');
-  const [consumptionDate, setConsumptionDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+  const [consumptionDate, setConsumptionDate] = useState<string>(getLocalDateString());
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isSubmitting, onClose]);
 
   if (!isOpen) return null;
 
@@ -72,6 +81,8 @@ export const RecordConsumptionModal: React.FC<RecordConsumptionModalProps> = ({
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    // Unique submission token generated per user confirmation attempt
+    const submissionNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const payload: CreateConsumptionPayload = {
       product_name: productName.trim() || 'Scanned Food Product',
       scan_id: `scan-${report.file_name || 'food'}-${Date.now()}`,
@@ -82,17 +93,27 @@ export const RecordConsumptionModal: React.FC<RecordConsumptionModalProps> = ({
       consumption_date: consumptionDate,
       nutrition_facts: report.nutrition_facts,
       notes: notes.trim(),
-      idempotency_key: `idemp-${report.file_name || 'food'}-${consumptionDate}-${servings}`,
+      idempotency_key: `idemp-${report.file_name || 'food'}-${submissionNonce}`,
     };
 
     try {
       const result = await recordConsumption(payload, token);
       setIsSubmitting(false);
+
+      // Dispatch global consumption event to immediately synchronize Daily Limits and active ledgers
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('unpack:consumption-recorded', {
+            detail: { date: consumptionDate, record: result.record },
+          })
+        );
+      }
+
       onSuccess(result.message || 'Consumption recorded successfully.');
       onClose();
     } catch (err: any) {
       setIsSubmitting(false);
-      setErrorMessage(err.message || 'Failed to save consumption record. Please retry.');
+      setErrorMessage(err.message || 'Failed to save consumption record. Please check network connection and retry.');
     }
   };
 
@@ -102,8 +123,20 @@ export const RecordConsumptionModal: React.FC<RecordConsumptionModalProps> = ({
   );
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="record-intake-title">
-      <div className="modal-card record-consumption-modal" style={{ maxWidth: '620px', width: '92%' }}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) onClose();
+      }}
+    >
+      <div
+        className="modal-card record-consumption-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="record-intake-title"
+        style={{ maxWidth: '620px', width: '92%' }}
+      >
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <span style={{ fontSize: '1.4rem' }}>🥗</span>
@@ -129,18 +162,15 @@ export const RecordConsumptionModal: React.FC<RecordConsumptionModalProps> = ({
 
         <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto', padding: '1.2rem' }}>
           {errorMessage && (
-            <div
-              style={{
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                borderRadius: '8px',
-                padding: '0.75rem 1rem',
-                marginBottom: '1rem',
-                color: '#f87171',
-                fontSize: '0.88rem',
-              }}
-            >
-              ⚠️ {errorMessage}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <StatusAlert
+                type="error"
+                title="Failed to Save Consumption Record"
+                message={errorMessage}
+                onRetry={handleConfirm}
+                retryLabel="Retry Save"
+                onDismiss={() => setErrorMessage(null)}
+              />
             </div>
           )}
 

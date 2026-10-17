@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LabelAnalysisReport } from '../types/label';
 import { CreateConsumptionPayload } from '../types/nutrition';
 import { recordConsumption } from '../api/client';
+import { StatusAlert } from './StatusAlert';
 
 interface LogoutConfirmationModalProps {
   pendingReport: LabelAnalysisReport;
@@ -64,11 +65,11 @@ export const LogoutConfirmationModal: React.FC<LogoutConfirmationModalProps> = (
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="logout-confirm-title">
-      <div className="modal-card logout-confirmation-modal" style={{ maxWidth: '520px', width: '90%' }}>
+      <div className="modal-card logout-confirmation-modal" style={{ maxWidth: '520px', width: '92%' }}>
         <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '1.4rem' }}>⚠️</span>
-            <h2 id="logout-confirm-title" style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <span style={{ fontSize: '1.4rem', lineHeight: 1 }} aria-hidden="true">⚠️</span>
+            <h2 id="logout-confirm-title" className="modal-title">
               Unresolved Food Scan
             </h2>
           </div>
@@ -78,32 +79,30 @@ export const LogoutConfirmationModal: React.FC<LogoutConfirmationModalProps> = (
             onClick={onCancel}
             aria-label="Close"
             disabled={isSaving}
+            title="Cancel (Escape)"
           >
             ✕
           </button>
         </div>
 
-        <div className="modal-body" style={{ padding: '1.2rem' }}>
-          <p style={{ fontSize: '0.92rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+        <div className="modal-body">
+          <p style={{ fontSize: '0.92rem', color: 'var(--text-primary)', marginBottom: '0.5rem', lineHeight: 1.5 }}>
             You scanned <strong>"{productName}"</strong> without deciding whether to record it to your daily intake ledger.
           </p>
-          <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+          <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', lineHeight: 1.45 }}>
             Did you consume this food item before logging out?
           </p>
 
           {errorMessage && (
-            <div
-              style={{
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                borderRadius: '8px',
-                padding: '0.75rem 1rem',
-                marginBottom: '1rem',
-                color: '#f87171',
-                fontSize: '0.86rem',
-              }}
-            >
-              ⚠️ {errorMessage}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <StatusAlert
+                type="error"
+                title="Failed to Save Consumption Record"
+                message={errorMessage}
+                onRetry={handleSaveAndLogout}
+                retryLabel="Retry Save"
+                onDismiss={() => setErrorMessage(null)}
+              />
             </div>
           )}
 

@@ -4,12 +4,17 @@ import { LabelAnalysisReport } from '../types/label';
 import { analyzeLabel, verifyFields, updateUserProfile } from '../api/client';
 import { EvidenceLens } from '../components/EvidenceLens';
 import { RecordConsumptionModal } from '../components/RecordConsumptionModal';
+import { StatusAlert } from '../components/StatusAlert';
 import { useAuth } from '../context/AuthContext';
 
 interface ScanPageProps {
-  onNavigate: (page: AppPage) => void;
+  onNavigate: (page: AppPage, options?: { sectionId?: string; analysisId?: string }) => void;
   onScanCompleted?: (report: LabelAnalysisReport, fileName: string) => void;
   onClearPendingScan?: () => void;
+  targetSectionId?: string | null;
+  targetAnalysisId?: string | null;
+  isConsumptionConfirmed?: boolean;
+  onRequestOpenRecordModal?: () => void;
 }
 
 const COMMON_RESTRICTIONS = [
@@ -28,6 +33,10 @@ export const ScanPage: React.FC<ScanPageProps> = ({
   onNavigate,
   onScanCompleted,
   onClearPendingScan,
+  targetSectionId = null,
+  targetAnalysisId = null,
+  isConsumptionConfirmed: externalConsumptionConfirmed,
+  onRequestOpenRecordModal,
 }) => {
   const { user, token, isAuthenticated, updateUserContext } = useAuth();
 
@@ -39,7 +48,11 @@ export const ScanPage: React.FC<ScanPageProps> = ({
   const [analysisReport, setAnalysisReport] = useState<LabelAnalysisReport | null>(null);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState<boolean>(false);
   const [recordSuccessMsg, setRecordSuccessMsg] = useState<string | null>(null);
-  const [isConsumptionConfirmed, setIsConsumptionConfirmed] = useState<boolean>(false);
+  const [localConsumptionConfirmed, setLocalConsumptionConfirmed] = useState<boolean>(false);
+  const isConsumptionConfirmed = externalConsumptionConfirmed !== undefined
+    ? externalConsumptionConfirmed
+    : localConsumptionConfirmed;
+  const setIsConsumptionConfirmed = setLocalConsumptionConfirmed;
   const [isScanDismissed, setIsScanDismissed] = useState<boolean>(false);
 
   // Load saved preferences if available
@@ -61,6 +74,67 @@ export const ScanPage: React.FC<ScanPageProps> = ({
       setRestrictions(user.profile.allergies);
     }
   }, [user?.profile?.allergies]);
+
+  // Recover active unrecorded scan from sessionStorage if user refreshed
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('unpack_active_unrecorded_scan');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.report && !analysisReport) {
+          setAnalysisReport(parsed.report);
+          onScanCompleted?.(parsed.report, parsed.fileName || 'Active Product');
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Smooth scroll and spotlight pulse when targetSectionId is supplied
+  useEffect(() => {
+    if (analysisReport && targetSectionId) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(targetSectionId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const sectionCard = el.closest('.analysis-section-card') || el;
+          sectionCard.classList.remove('section-nav-spotlight');
+          void (sectionCard as HTMLElement).offsetWidth;
+          sectionCard.classList.add('section-nav-spotlight');
+          setTimeout(() => {
+            sectionCard.classList.remove('section-nav-spotlight');
+          }, 2200);
+        }
+      }, 160);
+      return () => clearTimeout(timer);
+    }
+  }, [analysisReport, targetSectionId]);
+
+  // Save active unrecorded scan to sessionStorage and register native beforeunload
+  useEffect(() => {
+    const isPending = analysisReport && !isConsumptionConfirmed && !isScanDismissed;
+    if (isPending) {
+      try {
+        sessionStorage.setItem(
+          'unpack_active_unrecorded_scan',
+          JSON.stringify({
+            report: analysisReport,
+            fileName: selectedFile?.name || analysisReport.file_name || 'Active Product',
+          })
+        );
+      } catch {}
+
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      };
+    } else {
+      sessionStorage.removeItem('unpack_active_unrecorded_scan');
+    }
+  }, [analysisReport, isConsumptionConfirmed, isScanDismissed, selectedFile]);
 
   const toggleRestriction = async (id: string) => {
     const updated = restrictions.includes(id)
@@ -155,6 +229,7 @@ export const ScanPage: React.FC<ScanPageProps> = ({
     setIsConsumptionConfirmed(false);
     setRecordSuccessMsg(null);
     setIsScanDismissed(false);
+    sessionStorage.removeItem('unpack_active_unrecorded_scan');
     onClearPendingScan?.();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -236,6 +311,26 @@ export const ScanPage: React.FC<ScanPageProps> = ({
           </div>
         )}
       </div>
+
+      {/* Fallback Banner when navigated to a specific alert/section but analysis is not loaded */}
+      {!analysisReport && (targetSectionId || targetAnalysisId) && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <StatusAlert
+            type="info"
+            title="Analysis Report Not Found"
+            message={
+              targetAnalysisId
+                ? `Saved report for "${targetAnalysisId}" was not found in active session. Please upload or scan the packaging label to inspect its evidence.`
+                : 'You navigated to an alert finding, but no active label analysis is loaded in this session. Please upload or scan a food label to view evidence.'
+            }
+            action={{
+              label: 'Upload Food Label Photo',
+              onClick: () => fileInputRef.current?.click(),
+              variant: 'primary',
+            }}
+          />
+        </div>
+      )}
 
       {!analysisReport ? (
         <div className="scan-layout">
@@ -361,11 +456,15 @@ export const ScanPage: React.FC<ScanPageProps> = ({
                 </div>
 
                 {analysisError && (
-                  <div className="pipeline-notice" style={{ marginTop: '1rem', borderLeftColor: '#ef4444' }}>
-                    <div className="notice-icon">⚠️</div>
-                    <div className="notice-content">
-                      <strong>Analysis Failed:</strong> {analysisError}
-                    </div>
+                  <div style={{ marginTop: '1rem' }}>
+                    <StatusAlert
+                      type="error"
+                      title="Food Label Analysis Failed"
+                      message={analysisError}
+                      onRetry={handleAnalyze}
+                      retryLabel="Retry Analysis"
+                      onDismiss={() => setAnalysisError(null)}
+                    />
                   </div>
                 )}
 
@@ -451,7 +550,13 @@ export const ScanPage: React.FC<ScanPageProps> = ({
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                onClick={() => setIsRecordModalOpen(true)}
+                onClick={() => {
+                  if (onRequestOpenRecordModal) {
+                    onRequestOpenRecordModal();
+                  } else {
+                    setIsRecordModalOpen(true);
+                  }
+                }}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
               >
                 <span>🥗</span>
@@ -465,82 +570,18 @@ export const ScanPage: React.FC<ScanPageProps> = ({
 
           {/* Consumption Status Banners */}
           {isConsumptionConfirmed && recordSuccessMsg && (
-            <div
-              style={{
-                background: 'rgba(132, 204, 22, 0.12)',
-                border: '1px solid rgba(132, 204, 22, 0.4)',
-                borderRadius: '10px',
-                padding: '0.75rem 1.1rem',
-                marginBottom: '1.25rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '0.5rem',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>✅</span>
-                <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {recordSuccessMsg}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => onNavigate('nutrition')}
-              >
-                View Daily Intake Ledger →
-              </button>
-            </div>
-          )}
-
-          {!isConsumptionConfirmed && !isScanDismissed && (
-            <div
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '10px',
-                padding: '0.85rem 1.1rem',
-                marginBottom: '1.25rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <span style={{ fontSize: '1.3rem' }}>📋</span>
-                <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Preview Mode — Rule: Preview ≠ Consumption
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Scanning alone never alters your daily intake history. Did you eat or drink this product?
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setIsRecordModalOpen(true)}
-                >
-                  🥗 Record Consumption
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={() => {
-                    setIsScanDismissed(true);
-                    onClearPendingScan?.();
-                  }}
-                  title="Keep as preview without recording to intake ledger"
-                >
-                  Preview Only
-                </button>
-              </div>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <StatusAlert
+                type="success"
+                title="Product Confirmed to Daily Ledger"
+                message={recordSuccessMsg}
+                action={{
+                  label: 'View Daily Limits →',
+                  onClick: () => onNavigate('nutrition'),
+                  variant: 'primary',
+                }}
+                onDismiss={() => setRecordSuccessMsg(null)}
+              />
             </div>
           )}
 
@@ -596,6 +637,19 @@ export const ScanPage: React.FC<ScanPageProps> = ({
             previewUrl={previewUrl}
             onRetake={handleClear}
             onUpdateReport={setAnalysisReport}
+            onNavigateToLedger={() => onNavigate('nutrition')}
+            onRecordConsumption={() => {
+              if (onRequestOpenRecordModal) {
+                onRequestOpenRecordModal();
+              } else {
+                setIsRecordModalOpen(true);
+              }
+            }}
+            isConsumptionConfirmed={isConsumptionConfirmed}
+            recordSuccessMsg={recordSuccessMsg}
+            onNavigateToSection={(secId, repId) => {
+              onNavigate('scan', { sectionId: secId, analysisId: repId });
+            }}
           />
 
           <RecordConsumptionModal
